@@ -1,4 +1,5 @@
 .goda/
 /goda-host
 /goda-build
+/goda.toml
 *.test

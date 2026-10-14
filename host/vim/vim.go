@@ -37,7 +37,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/Shougo/goda.vim/core"
+	"github.com/Shougo/goda.vim/internal/core"
 	"github.com/Shougo/goda.vim/sdk"
 )
 

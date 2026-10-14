@@ -11,7 +11,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/Shougo/goda.vim/core"
+	"github.com/Shougo/goda.vim/internal/core"
 	"github.com/Shougo/goda.vim/sdk"
 )
 

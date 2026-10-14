@@ -89,19 +89,24 @@ without `--transport` (default `nvim`).
 ## Layout
 
 ```
-sdk/                  extension contract
-core/                 pipeline, isolation, the methods every transport serves
-ext/{source,filter}/  example extensions
+autoload/ plugin/     Vim script side (both editors); must stay at the root,
+                      plugin managers add the repository root to 'runtimepath'
+sdk/                  extension contract (public: extensions import this)
+cmd/goda-build/       the builder (public: go install)
 host/nvim/            Neovim transport (msgpack-rpc over stdio)
 host/vim/             Vim transport (JSON channel over stdio)
 host/jsonl/           dev/test transport
+ext/{source,filter}/  example extensions
+internal/core/        pipeline, isolation, the methods every transport serves
 internal/msgpack/     codec
 internal/manifest/    goda.toml parser
 internal/gen/         manifest -> go.mod + main.go
-cmd/goda-build/       the builder
-autoload/ plugin/     Vim script side (both editors)
 bench/run.sh          rebuild-time benchmark
 ```
+
+Public means importable by other modules: `sdk` by extensions, `host/*` by the
+generated `main.go`. Everything else is under `internal/`, so it can change
+without breaking anyone.
 
 ## Status
 
