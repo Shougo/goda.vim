@@ -1,0 +1,4 @@
+.goda/
+/goda-host
+/goda-build
+*.test
