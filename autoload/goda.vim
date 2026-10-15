@@ -1,12 +1,13 @@
 " goda.vim - Go based dark powered framework for Vim/Neovim
 "
-" One plugin binary (built by goda-build) serves both editors; the editor picks
-" the transport with --transport:
+" One plugin binary (built by the user, see README) serves both editors; the
+" editor picks the transport with --transport:
 "
 "   Neovim  jobstart({'rpc': v:true}), msgpack-rpc, rpcrequest()
 "   Vim     job_start({'mode': 'json'}), JSON channel, ch_evalexpr()
 "
-" goda#request(), goda#notify() and goda#gather() hide the difference.
+" goda#request() and goda#notify() hide the difference. A method is addressed
+" as (plugin, method): goda#request('cmp', 'gather', {...}).
 
 let s:nvim_chan = 0   " Neovim: channel id of the plugin job
 let s:job = v:null    " Vim: the plugin job
@@ -111,15 +112,16 @@ function! goda#stop() abort
   endif
 endfunction
 
-" Blocking request to the plugin. Throws on failure.
-function! goda#request(method, ...) abort
+" Blocking request to a plugin's method. Throws on failure.
+function! goda#request(plugin, method, ...) abort
   call s:ensure_running()
+  let l:name = a:plugin . '.' . a:method
   if has('nvim')
-    return call('rpcrequest', [s:nvim_chan, a:method] + a:000)
+    return call('rpcrequest', [s:nvim_chan, l:name] + a:000)
   endif
-  let l:r = ch_evalexpr(job_getchannel(s:job), [a:method] + a:000)
+  let l:r = ch_evalexpr(job_getchannel(s:job), [l:name] + a:000)
   if type(l:r) != v:t_dict
-    throw 'goda: no answer to ' . a:method . ' (timed out, or the plugin exited)'
+    throw 'goda: no answer to ' . l:name . ' (timed out, or the plugin exited)'
   endif
   if has_key(l:r, 'error')
     throw 'goda: ' . l:r.error
@@ -127,35 +129,15 @@ function! goda#request(method, ...) abort
   return get(l:r, 'result', v:null)
 endfunction
 
-" Fire-and-forget notification to the plugin.
-function! goda#notify(method, ...) abort
+" Fire-and-forget notification to a plugin's method.
+function! goda#notify(plugin, method, ...) abort
   call s:ensure_running()
+  let l:name = a:plugin . '.' . a:method
   if has('nvim')
-    return call('rpcnotify', [s:nvim_chan, a:method] + a:000)
+    return call('rpcnotify', [s:nvim_chan, l:name] + a:000)
   endif
   " id 0 tells the plugin that nobody waits for an answer
-  call ch_sendraw(job_getchannel(s:job), json_encode([0, [a:method] + a:000]) . "\n")
-endfunction
-
-" Run the completion pipeline. See sdk.GatherRequest in the Go SDK:
-"   {'sources': [...], 'filters': [...], 'context': {...}, 'timeout_ms': 300}
-function! goda#gather(request) abort
-  return goda#request('goda_gather', a:request)
-endfunction
-
-" Convenience: build a context from the current buffer around the cursor.
-function! goda#context() abort
-  let l:lnum = line('.')
-  let l:first = max([1, l:lnum - 200])
-  let l:last = min([line('$'), l:lnum + 200])
-  let l:before = strpart(getline('.'), 0, col('.') - 1)
-  return {
-        \ 'input': l:before,
-        \ 'complete_str': matchstr(l:before, '\k*$'),
-        \ 'filetype': &filetype,
-        \ 'line': l:lnum - l:first + 1,
-        \ 'lines': getline(l:first, l:last),
-        \ }
+  call ch_sendraw(job_getchannel(s:job), json_encode([0, [l:name] + a:000]) . "\n")
 endfunction
 
 " ---------------------------------------------------------------------------

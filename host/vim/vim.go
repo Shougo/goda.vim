@@ -23,11 +23,10 @@
 // (goda#_call, goda#_eval, goda#_cmd) that catch errors and answer with
 // [0, result] or [1, message].
 //
-// The methods served to the editor are defined once, in core.Methods.
+// The method table (plugin.method -> handler) is built by package host.
 package vim
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -37,7 +36,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/Shougo/goda.vim/internal/core"
+	"github.com/Shougo/goda.vim/internal/jsonval"
 	"github.com/Shougo/goda.vim/sdk"
 )
 
@@ -45,6 +44,8 @@ var errClosed = errors.New("vim: channel closed")
 
 // Host implements sdk.Host on top of Vim's channel commands.
 type Host struct{ c *conn }
+
+func (h *Host) Meta() sdk.Meta { return sdk.Meta{Host: sdk.HostVim} }
 
 func (h *Host) Call(ctx context.Context, fn string, args ...any) (any, error) {
 	if args == nil {
@@ -65,20 +66,18 @@ func (h *Host) Cmd(ctx context.Context, cmd string) error {
 // Serve runs the plugin over stdin/stdout until Vim closes the channel.
 // stdout carries the protocol, so the process-wide os.Stdout is redirected to
 // stderr: a stray fmt.Println in an extension cannot corrupt the stream.
-func Serve(reg *sdk.Registry) error {
+func Serve(table map[string]sdk.Handler) error {
 	in, out := os.Stdin, os.Stdout
 	os.Stdout = os.Stderr
 	logger := log.New(os.Stderr, "goda: ", log.LstdFlags)
-	return ServeIO(context.Background(), in, out, reg, logger.Printf)
+	return ServeIO(context.Background(), in, out, table, logger.Printf)
 }
 
 // ServeIO is Serve over arbitrary streams (used by tests).
-func ServeIO(ctx context.Context, r io.Reader, w io.Writer, reg *sdk.Registry, logf func(string, ...any)) error {
+func ServeIO(ctx context.Context, r io.Reader, w io.Writer, table map[string]sdk.Handler, logf func(string, ...any)) error {
 	c := newConn(r, w, logf)
-	host := &Host{c: c}
-	for name, fn := range core.Methods(reg, host) {
-		c.handlers[name] = fn
-	}
+	c.host = &Host{c: c}
+	c.handlers = table
 	return c.serve(ctx)
 }
 
@@ -93,7 +92,8 @@ type conn struct {
 	dec      *json.Decoder
 	w        io.Writer
 	logf     func(format string, args ...any)
-	handlers map[string]core.Handler
+	host     sdk.Host
+	handlers map[string]sdk.Handler
 
 	wmu      sync.Mutex     // serialises writes
 	inflight sync.WaitGroup // handlers still running; serve waits for them
@@ -113,7 +113,7 @@ func newConn(r io.Reader, w io.Writer, logf func(string, ...any)) *conn {
 		dec:      json.NewDecoder(r),
 		w:        w,
 		logf:     logf,
-		handlers: map[string]core.Handler{},
+		handlers: map[string]sdk.Handler{},
 		pending:  map[int64]chan reply{},
 		done:     make(chan struct{}),
 	}
@@ -177,7 +177,7 @@ func (c *conn) serveRequest(ctx context.Context, id int64, raw json.RawMessage) 
 }
 
 func (c *conn) run(ctx context.Context, raw json.RawMessage) (res any, err error) {
-	payload, derr := decode(raw)
+	payload, derr := jsonval.Decode(raw)
 	arr, ok := payload.([]any)
 	if derr != nil || !ok || len(arr) == 0 {
 		return nil, errors.New("malformed request: want [method, params...]")
@@ -195,7 +195,7 @@ func (c *conn) run(ctx context.Context, raw json.RawMessage) (res any, err error
 			res, err = nil, fmt.Errorf("panic in %s: %v", method, p)
 		}
 	}()
-	return fn(ctx, arr[1:])
+	return fn(ctx, c.host, arr[1:])
 }
 
 func (c *conn) send(v any) error {
@@ -266,7 +266,7 @@ func (c *conn) deliver(id int64, raw json.RawMessage) {
 		c.logf("answer for unknown call %d", id)
 		return
 	}
-	v, err := decode(raw)
+	v, err := jsonval.Decode(raw)
 	ch <- reply{value: v, err: err}
 }
 
@@ -287,41 +287,5 @@ func (c *conn) shutdown() {
 	for id, ch := range c.pending {
 		ch <- reply{err: errClosed}
 		delete(c.pending, id)
-	}
-}
-
-// decode turns JSON into the same generic values the msgpack transport yields
-// (int64, float64, string, bool, nil, []any, map[string]any), so an extension
-// sees identical types whichever editor it runs in.
-func decode(raw []byte) (any, error) {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	var v any
-	if err := dec.Decode(&v); err != nil {
-		return nil, err
-	}
-	return normalize(v), nil
-}
-
-func normalize(v any) any {
-	switch x := v.(type) {
-	case json.Number:
-		if i, err := x.Int64(); err == nil {
-			return i
-		}
-		f, _ := x.Float64()
-		return f
-	case []any:
-		for i := range x {
-			x[i] = normalize(x[i])
-		}
-		return x
-	case map[string]any:
-		for k := range x {
-			x[k] = normalize(x[k])
-		}
-		return x
-	default:
-		return v
 	}
 }

@@ -1,44 +1,63 @@
-// Command plugin is the plugin binary used by vim_e2e_test.go: the real Vim
-// transport plus a few extensions that probe the host API.
+// Command plugin is the plugin binary used by vim_e2e_test.go: one plugin
+// ("test") whose methods probe the transport and the host API from inside a
+// real Vim.
 package main
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/Shougo/goda.vim/ext/filter/matcher_head"
-	"github.com/Shougo/goda.vim/ext/source/around"
-	vimsource "github.com/Shougo/goda.vim/ext/source/vim"
-	vimhost "github.com/Shougo/goda.vim/host/vim"
+	"github.com/Shougo/goda.vim/host"
 	"github.com/Shougo/goda.vim/sdk"
 )
 
-// slow ignores its context on purpose, like a badly behaved extension.
-type slow struct{}
+type testPlugin struct{}
 
-func (slow) Gather(context.Context, sdk.Host, sdk.Context) ([]sdk.Candidate, error) {
-	time.Sleep(3 * time.Second)
-	return []sdk.Candidate{{Word: "late"}}, nil
+func (testPlugin) Name() string { return "test" }
+
+func (testPlugin) Handlers() map[string]sdk.Handler {
+	return map[string]sdk.Handler{
+		"echo": func(_ context.Context, _ sdk.Host, p []any) (any, error) { return p, nil },
+
+		"meta": func(_ context.Context, h sdk.Host, _ []any) (any, error) { return h.Meta().Host, nil },
+
+		// The plugin calls back into this Vim while Vim waits for the answer.
+		"callback": func(ctx context.Context, h sdk.Host, _ []any) (any, error) {
+			return h.Call(ctx, "getcompletion", "strl", "function")
+		},
+
+		// Exercises Eval, Cmd and Call, including their error paths, and
+		// reports what it saw.
+		"probe": probe,
+
+		// stdout carries the protocol and must stay clean.
+		"shout": func(context.Context, sdk.Host, []any) (any, error) {
+			fmt.Println("this goes to stdout")
+			return "shout", nil
+		},
+
+		// Answers after Vim's request timeout.
+		"slow": func(context.Context, sdk.Host, []any) (any, error) {
+			time.Sleep(2 * time.Second)
+			return "late", nil
+		},
+
+		// A struct argument: its json tags are what Vim sees.
+		"struct": func(ctx context.Context, h sdk.Host, _ []any) (any, error) {
+			type item struct {
+				Word string `json:"word"`
+				Kind string `json:"kind"`
+			}
+			return h.Call(ctx, "get", map[string]any{"x": []item{{"w", "k"}}}, "x")
+		},
+	}
 }
 
-// shout writes to stdout, which carries the protocol and must stay clean.
-type shout struct{}
-
-func (shout) Gather(context.Context, sdk.Host, sdk.Context) ([]sdk.Candidate, error) {
-	fmt.Println("this goes to stdout")
-	return []sdk.Candidate{{Word: "shout"}}, nil
-}
-
-// probe exercises Eval, Cmd and Call, including their error paths, and
-// reports what it saw as candidate words.
-type probe struct{}
-
-func (probe) Gather(ctx context.Context, h sdk.Host, _ sdk.Context) ([]sdk.Candidate, error) {
-	var words []string
-	add := func(format string, args ...any) { words = append(words, fmt.Sprintf(format, args...)) }
+func probe(ctx context.Context, h sdk.Host, _ []any) (any, error) {
+	var out []any
+	add := func(format string, args ...any) { out = append(out, fmt.Sprintf(format, args...)) }
 	mentions := func(err error, s string) bool { return err != nil && strings.Contains(err.Error(), s) }
 
 	v, err := h.Eval(ctx, "1 + 2")
@@ -64,24 +83,7 @@ func (probe) Gather(ctx context.Context, h sdk.Host, _ sdk.Context) ([]sdk.Candi
 	// returns that string must not be mistaken for a failure.
 	v, err = h.Call(ctx, "toupper", "error")
 	add("error-string=%v:%v", v, err)
-
-	out := make([]sdk.Candidate, len(words))
-	for i, w := range words {
-		out[i] = sdk.Candidate{Word: w}
-	}
 	return out, nil
 }
 
-func main() {
-	reg := sdk.NewRegistry()
-	reg.RegisterSource("around", around.New())
-	reg.RegisterSource("vim", vimsource.New())
-	reg.RegisterSource("slow", slow{})
-	reg.RegisterSource("shout", shout{})
-	reg.RegisterSource("probe", probe{})
-	reg.RegisterFilter("matcher_head", matcherhead.New())
-	if err := vimhost.Serve(reg); err != nil {
-		fmt.Fprintln(os.Stderr, "goda:", err)
-		os.Exit(1)
-	}
-}
+func main() { host.Main(testPlugin{}) }

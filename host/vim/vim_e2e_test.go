@@ -13,10 +13,10 @@ import (
 	"time"
 )
 
-// TestRealVim drives the actual plugin binary from an actual Vim, through the
-// shipped autoload/goda.vim. It is the check that the wire format in the
-// package comment matches what Vim really does. Skipped without a Vim that has
-// +job and +channel.
+// TestRealVim drives a plugin binary from an actual Vim, through the shipped
+// autoload/goda.vim. It is the check that the wire format in the package
+// comment matches what Vim really does. Skipped without a Vim that has +job and
+// +channel.
 func TestRealVim(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a binary and starts Vim")
@@ -70,25 +70,6 @@ func TestRealVim(t *testing.T) {
 	}
 	t.Logf("results:\n%s", raw)
 
-	type gathered struct {
-		Candidates []struct{ Word string } `json:"candidates"`
-		Errors     []struct{ Name, Message string }
-	}
-	gather := func(name string) (words []string, errs []string) {
-		t.Helper()
-		var g gathered
-		if err := json.Unmarshal([]byte(res[name]), &g); err != nil {
-			t.Fatalf("%s: %q is not a gather result: %v", name, res[name], err)
-		}
-		for _, c := range g.Candidates {
-			words = append(words, c.Word)
-		}
-		for _, e := range g.Errors {
-			errs = append(errs, e.Name+": "+e.Message)
-		}
-		return words, errs
-	}
-
 	if res["start"] != "" {
 		t.Fatalf("goda#start failed: %s", res["start"])
 	}
@@ -96,22 +77,35 @@ func TestRealVim(t *testing.T) {
 		t.Errorf("running = %q, want 1", res["running"])
 	}
 
-	var list struct{ Sources, Filters []string }
-	if err := json.Unmarshal([]byte(res["list"]), &list); err != nil {
-		t.Fatalf("list: %q: %v", res["list"], err)
+	want := map[string]string{
+		"plugins": `{"test":["callback","echo","meta","probe","shout","slow","struct"]}`,
+		"echo":    `[1,2.5,"x",[true,null],{"k":["日本語"]}]`,
+		"meta":    `"vim"`,
+		// Still usable after a request timed out, after a notification, and
+		// after the late answer of the timed-out request arrived.
+		"after_slow":        `["still alive"]`,
+		"after_notify":      `["after notify"]`,
+		"after_late_answer": `["after the late answer"]`,
+		"stopped":           "0",
 	}
-	if want := []string{"around", "probe", "shout", "slow", "vim"}; !reflect.DeepEqual(list.Sources, want) {
-		t.Errorf("sources = %v, want %v", list.Sources, want)
+	for name, w := range want {
+		if res[name] != w {
+			t.Errorf("%s = %s\n  want %s", name, res[name], w)
+		}
 	}
 
-	if w, e := gather("around"); !reflect.DeepEqual(w, []string{"foo", "foobar"}) || len(e) != 0 {
-		t.Errorf("around: words %v errors %v", w, e)
+	// The plugin's getcompletion call ran inside this Vim. (Vim's function
+	// completion appends the opening parenthesis.)
+	var cb []string
+	if err := json.Unmarshal([]byte(res["callback"]), &cb); err != nil || !contains(cb, "strlen(") {
+		t.Errorf("callback = %s, want a list containing strlen(", res["callback"])
 	}
 
-	// The nested path: the plugin's getcompletion call ran inside this Vim.
-	// (Vim's function completion appends the opening parenthesis.)
-	if w, e := gather("callback"); len(e) != 0 || !contains(w, "strlen(") {
-		t.Errorf("callback: words %v errors %v", w, e)
+	// A struct passed to Call reaches Vim with its json tags as dict keys.
+	var st []map[string]string
+	if err := json.Unmarshal([]byte(res["struct"]), &st); err != nil ||
+		!reflect.DeepEqual(st, []map[string]string{{"word": "w", "kind": "k"}}) {
+		t.Errorf("struct = %s", res["struct"])
 	}
 
 	wantProbe := []string{
@@ -122,38 +116,28 @@ func TestRealVim(t *testing.T) {
 		"types=int64,float64,string,bool,<nil>",
 		"error-string=ERROR:<nil>",
 	}
-	if w, e := gather("probe"); !reflect.DeepEqual(w, wantProbe) || len(e) != 0 {
-		t.Errorf("probe:\n got %q\nwant %q\nerrors %v", w, wantProbe, e)
+	var probe []string
+	if err := json.Unmarshal([]byte(res["probe"]), &probe); err != nil || !reflect.DeepEqual(probe, wantProbe) {
+		t.Errorf("probe:\n got %s\nwant %q", res["probe"], wantProbe)
 	}
 
-	// A source that ignores its context is cut off; the others still answer.
-	if w, e := gather("slow"); !reflect.DeepEqual(w, []string{"xray"}) ||
-		len(e) != 1 || !strings.Contains(e[0], "timed out") {
-		t.Errorf("slow: words %v errors %v", w, e)
-	}
-
-	if w, _ := gather("stdout"); !reflect.DeepEqual(w, []string{"shout"}) {
-		t.Errorf("stdout: a stray Println must not break the protocol, got %v", w)
+	if res["stdout"] != `"shout"` {
+		t.Errorf("a stray Println must not break the protocol, got %s", res["stdout"])
 	}
 	if !strings.Contains(res["log"], "this goes to stdout") {
 		t.Errorf("stdout should be redirected to the log (stderr), log = %s", res["log"])
 	}
 
-	if v := res["unknown_method"]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, "unknown method") {
-		t.Errorf("unknown_method = %q, want an exception", v)
+	for _, name := range []string{"unknown_method", "unknown_plugin"} {
+		if v := res[name]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, "unknown method") {
+			t.Errorf("%s = %q, want an exception", name, v)
+		}
 	}
-	if _, e := gather("unknown_source"); len(e) != 1 || !strings.Contains(e[0], "not registered") {
-		t.Errorf("unknown_source errors = %v", e)
+	if v := res["slow"]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, "no answer") {
+		t.Errorf("slow = %q, want a 'no answer' exception", v)
 	}
-
 	if strings.HasPrefix(res["notify"], "EXC") {
 		t.Errorf("notify failed: %s", res["notify"])
-	}
-	if !strings.Contains(res["after_notify"], `"sources"`) {
-		t.Errorf("a request after a notification must still work: %s", res["after_notify"])
-	}
-	if res["stopped"] != "0" {
-		t.Errorf("stopped = %q, want 0", res["stopped"])
 	}
 }
 

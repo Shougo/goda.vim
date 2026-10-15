@@ -2,16 +2,43 @@ package nvim
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"reflect"
 	"testing"
 	"time"
 
-	"github.com/Shougo/goda.vim/ext/filter/matcher_head"
-	"github.com/Shougo/goda.vim/ext/source/vim"
 	"github.com/Shougo/goda.vim/internal/msgpack"
 	"github.com/Shougo/goda.vim/sdk"
 )
+
+// testTable is a handful of handlers that exercise the transport.
+func testTable() map[string]sdk.Handler {
+	return map[string]sdk.Handler{
+		"t.echo": func(_ context.Context, _ sdk.Host, p []any) (any, error) { return p, nil },
+		"t.meta": func(_ context.Context, h sdk.Host, _ []any) (any, error) { return h.Meta().Host, nil },
+		// Calls back into the editor and returns what it answered.
+		"t.call": func(ctx context.Context, h sdk.Host, p []any) (any, error) {
+			return h.Call(ctx, p[0].(string), p[1:]...)
+		},
+		// Passes a struct to the editor: the transport must make it encodable.
+		"t.struct": func(ctx context.Context, h sdk.Host, _ []any) (any, error) {
+			type arg struct {
+				N    int    `json:"n"`
+				Word string `json:"word"`
+			}
+			return h.Call(ctx, "f", arg{N: 5, Word: "w"})
+		},
+		"t.cmd": func(ctx context.Context, h sdk.Host, p []any) (any, error) {
+			return nil, h.Cmd(ctx, p[0].(string))
+		},
+		"t.eval": func(ctx context.Context, h sdk.Host, p []any) (any, error) {
+			return h.Eval(ctx, p[0].(string))
+		},
+		"t.fail": func(context.Context, sdk.Host, []any) (any, error) { return nil, fmt.Errorf("deliberate") },
+		"t.boom": func(context.Context, sdk.Host, []any) (any, error) { panic("kaboom") },
+	}
+}
 
 // fakeEditor plays Neovim's side of the wire. It is written against the
 // msgpack-rpc spec, not against a real Neovim, so it proves the protocol logic
@@ -22,13 +49,13 @@ type fakeEditor struct {
 	dec *msgpack.Decoder
 }
 
-func startPlugin(t *testing.T, reg *sdk.Registry) *fakeEditor {
+func startPlugin(t *testing.T, table map[string]sdk.Handler) *fakeEditor {
 	t.Helper()
 	toPluginR, toPluginW := io.Pipe()
 	fromPluginR, fromPluginW := io.Pipe()
 	done := make(chan error, 1)
 	go func() {
-		err := ServeIO(context.Background(), toPluginR, fromPluginW, reg, t.Logf)
+		err := ServeIO(context.Background(), toPluginR, fromPluginW, table, t.Logf)
 		fromPluginW.Close()
 		done <- err
 	}()
@@ -78,119 +105,127 @@ func (e *fakeEditor) recv() []any {
 	}
 }
 
-func TestList(t *testing.T) {
-	reg := sdk.NewRegistry()
-	reg.RegisterSource("vim", vim.New())
-	reg.RegisterFilter("matcher_head", matcherhead.New())
-	ed := startPlugin(t, reg)
+// response checks the header of [1, id, error, result] and returns the rest.
+func response(t *testing.T, msg []any, id int64) (errVal, result any) {
+	t.Helper()
+	if len(msg) != 4 || msg[0] != int64(1) || msg[1] != id {
+		t.Fatalf("want a response to request %d, got %v", id, msg)
+	}
+	return msg[2], msg[3]
+}
 
-	ed.send([]any{0, 7, "goda_list", []any{}})
-	msg := ed.recv()
-	if msg[0] != int64(1) || msg[1] != int64(7) || msg[2] != nil {
-		t.Fatalf("unexpected response header: %v", msg)
+func TestEcho(t *testing.T) {
+	ed := startPlugin(t, testTable())
+	ed.send([]any{0, 7, "t.echo", []any{1, "two", []any{3.5, nil}}})
+	e, res := response(t, ed.recv(), 7)
+	if e != nil {
+		t.Fatalf("unexpected error %v", e)
 	}
-	want := map[string]any{
-		"sources": []any{"vim"},
-		"filters": []any{"matcher_head"},
-	}
-	if !reflect.DeepEqual(msg[3], want) {
-		t.Fatalf("got %v, want %v", msg[3], want)
+	if want := []any{int64(1), "two", []any{3.5, nil}}; !reflect.DeepEqual(res, want) {
+		t.Fatalf("got %v, want %v", res, want)
 	}
 }
 
-// The important case: the editor blocks in rpcrequest(goda_gather) while the
-// extension calls back into the editor (getcompletion) before the final
-// response is sent.
-func TestGatherWithNestedHostCall(t *testing.T) {
-	reg := sdk.NewRegistry()
-	reg.RegisterSource("vim", vim.New())
-	reg.RegisterFilter("matcher_head", matcherhead.New())
-	ed := startPlugin(t, reg)
+func TestMeta(t *testing.T) {
+	ed := startPlugin(t, testTable())
+	ed.send([]any{0, 1, "t.meta", []any{}})
+	if _, res := response(t, ed.recv(), 1); res != "nvim" {
+		t.Fatalf("meta = %v", res)
+	}
+}
 
-	ed.send([]any{0, 1, "goda_gather", []any{map[string]any{
-		"sources": []any{"vim"},
-		"filters": []any{"matcher_head"},
-		"context": map[string]any{"complete_str": "str"},
-	}}})
+// The important case: the editor blocks in rpcrequest() while the handler
+// calls back into the editor before the final response is sent.
+func TestNestedHostCall(t *testing.T) {
+	ed := startPlugin(t, testTable())
+	ed.send([]any{0, 1, "t.call", []any{"getcompletion", "str", "function"}})
 
-	// 1. The plugin asks the editor for completions.
+	// 1. The plugin asks the editor.
 	req := ed.recv()
 	if req[0] != int64(0) || req[2] != "nvim_call_function" {
 		t.Fatalf("expected nvim_call_function request, got %v", req)
 	}
-	params := req[3].([]any)
-	if params[0] != "getcompletion" {
-		t.Fatalf("unexpected function %v", params[0])
+	if want := []any{"getcompletion", []any{"str", "function"}}; !reflect.DeepEqual(req[3], want) {
+		t.Fatalf("params = %v, want %v", req[3], want)
 	}
-	// 2. The editor answers (the second one is filtered out by matcher_head).
-	ed.send([]any{1, req[1], nil, []any{"strlen", "strpart", "substitute"}})
-
-	// 3. The original request completes.
-	resp := ed.recv()
-	if resp[0] != int64(1) || resp[1] != int64(1) || resp[2] != nil {
-		t.Fatalf("unexpected response: %v", resp)
-	}
-	res := resp[3].(map[string]any)
-	cands := res["candidates"].([]any)
-	if len(cands) != 2 {
-		t.Fatalf("want 2 candidates, got %v", cands)
-	}
-	if w := cands[0].(map[string]any)["word"]; w != "strlen" {
-		t.Fatalf("first candidate = %v", w)
-	}
-	if errs := res["errors"].([]any); len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
+	// 2. The editor answers.
+	ed.send([]any{1, req[1], nil, []any{"strlen", "strpart"}})
+	// 3. The original request completes with that answer.
+	e, res := response(t, ed.recv(), 1)
+	if e != nil || !reflect.DeepEqual(res, []any{"strlen", "strpart"}) {
+		t.Fatalf("got %v, %v", e, res)
 	}
 }
 
-func TestEditorErrorBecomesExtensionError(t *testing.T) {
-	reg := sdk.NewRegistry()
-	reg.RegisterSource("vim", vim.New())
-	ed := startPlugin(t, reg)
-
-	ed.send([]any{0, 2, "goda_gather", []any{map[string]any{
-		"sources": []any{"vim"},
-		"context": map[string]any{"complete_str": "x"},
-	}}})
+func TestStructArgumentsAreEncodable(t *testing.T) {
+	ed := startPlugin(t, testTable())
+	ed.send([]any{0, 1, "t.struct", []any{}})
 	req := ed.recv()
-	ed.send([]any{1, req[1], []any{0, "E117: Unknown function"}, nil})
-
-	resp := ed.recv()
-	res := resp[3].(map[string]any)
-	errs := res["errors"].([]any)
-	if len(errs) != 1 {
-		t.Fatalf("want one extension error, got %v", errs)
+	want := []any{"f", []any{map[string]any{"n": int64(5), "word": "w"}}}
+	if !reflect.DeepEqual(req[3], want) {
+		t.Fatalf("params = %v, want %v", req[3], want)
 	}
-	if res["candidates"] == nil {
-		t.Fatal("candidates must still be present")
+	ed.send([]any{1, req[1], nil, int64(1)})
+	response(t, ed.recv(), 1)
+}
+
+func TestEvalAndCmd(t *testing.T) {
+	ed := startPlugin(t, testTable())
+
+	ed.send([]any{0, 1, "t.eval", []any{"1+2"}})
+	req := ed.recv()
+	if req[2] != "nvim_eval" || !reflect.DeepEqual(req[3], []any{"1+2"}) {
+		t.Fatalf("got %v", req)
+	}
+	ed.send([]any{1, req[1], nil, int64(3)})
+	if _, res := response(t, ed.recv(), 1); res != int64(3) {
+		t.Fatalf("eval = %v", res)
+	}
+
+	ed.send([]any{0, 2, "t.cmd", []any{"let g:x = 1"}})
+	req = ed.recv()
+	if req[2] != "nvim_command" {
+		t.Fatalf("got %v", req)
+	}
+	ed.send([]any{1, req[1], nil, nil})
+	if e, _ := response(t, ed.recv(), 2); e != nil {
+		t.Fatalf("cmd failed: %v", e)
+	}
+}
+
+func TestEditorErrorReachesTheHandler(t *testing.T) {
+	ed := startPlugin(t, testTable())
+	ed.send([]any{0, 2, "t.call", []any{"nope"}})
+	req := ed.recv()
+	ed.send([]any{1, req[1], []any{0, "E117: Unknown function: nope"}, nil})
+	e, _ := response(t, ed.recv(), 2)
+	if e == nil {
+		t.Fatal("the handler's failure must reach the editor as an error response")
+	}
+}
+
+func TestHandlerFailures(t *testing.T) {
+	ed := startPlugin(t, testTable())
+	for id, method := range map[int64]string{3: "t.fail", 4: "t.boom", 5: "nope"} {
+		ed.send([]any{0, id, method, []any{}})
+		if e, _ := response(t, ed.recv(), id); e == nil {
+			t.Errorf("%s must produce an error response", method)
+		}
+	}
+	// The plugin is still alive afterwards.
+	ed.send([]any{0, 6, "t.meta", []any{}})
+	if _, res := response(t, ed.recv(), 6); res != "nvim" {
+		t.Fatalf("plugin died after a failing handler: %v", res)
 	}
 }
 
 // Regression: a request followed immediately by EOF (`printf ... | plugin`)
 // must still be answered before the plugin exits.
 func TestResponseSurvivesEOF(t *testing.T) {
-	ed := startPlugin(t, sdk.NewRegistry())
-	ed.send([]any{0, 9, "goda_list", []any{}})
+	ed := startPlugin(t, testTable())
+	ed.send([]any{0, 9, "t.meta", []any{}})
 	ed.to.Close() // the editor goes away right after asking
-
-	msg := ed.recv()
-	if msg[0] != int64(1) || msg[1] != int64(9) || msg[2] != nil {
-		t.Fatalf("unexpected response: %v", msg)
-	}
-}
-
-func TestUnknownMethodAndBadRequest(t *testing.T) {
-	ed := startPlugin(t, sdk.NewRegistry())
-
-	ed.send([]any{0, 3, "nope", []any{}})
-	msg := ed.recv()
-	if msg[2] == nil {
-		t.Fatalf("expected an error response, got %v", msg)
-	}
-
-	ed.send([]any{0, 4, "goda_gather", []any{}})
-	msg = ed.recv()
-	if msg[1] != int64(4) || msg[2] == nil {
-		t.Fatalf("expected an error response for the missing argument, got %v", msg)
+	if e, res := response(t, ed.recv(), 9); e != nil || res != "nvim" {
+		t.Fatalf("got %v, %v", e, res)
 	}
 }

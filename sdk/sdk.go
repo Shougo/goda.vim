@@ -1,40 +1,40 @@
-// Package sdk is the contract between goda.vim and its extensions.
+// Package sdk is the contract between goda.vim and the plugins built on it.
 //
-// An extension is an ordinary Go package that exports
-//
-//	func New() sdk.Source // or sdk.Filter
-//
-// and is linked into the plugin binary by goda-build. Extensions run inside
-// the plugin's process, so they must be cheap and must honour ctx.
+// goda.vim itself knows nothing about completion, filtering or any other
+// feature. It moves messages between the editor and plugins, and gives plugins
+// a way to call the editor (Host). What a plugin does with that is its own
+// business: a completion plugin, for instance, defines its own extension kinds
+// (sources, filters, UIs) on top of this package.
 package sdk
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"sort"
 )
 
-// Candidate is a single completion item.
-type Candidate struct {
-	Word string `json:"word"`
-	Abbr string `json:"abbr,omitempty"`
-	Kind string `json:"kind,omitempty"`
-	Menu string `json:"menu,omitempty"`
-	Info string `json:"info,omitempty"`
+// Editors reported by Meta.Host.
+const (
+	HostVim  = "vim"
+	HostNvim = "nvim"
+	// HostNone is the jsonl development transport: there is no editor, and
+	// every Host call fails.
+	HostNone = "none"
+)
+
+// Meta describes the editor on the other end. It is a struct so that fields
+// can be added later without changing the Host interface.
+type Meta struct {
+	Host string // HostVim, HostNvim or HostNone
 }
 
-// Context describes the editing state at the time of completion.
-type Context struct {
-	Input       string   `json:"input"`        // text before the cursor
-	CompleteStr string   `json:"complete_str"` // the word being completed
-	Filetype    string   `json:"filetype"`
-	Line        int      `json:"line"`  // 1-based cursor line, index into Lines
-	Lines       []string `json:"lines"` // buffer lines around the cursor
-}
-
-// Host is the editor. Implementations exist per transport (Neovim, Vim, ...).
+// Host is the editor. One implementation exists per transport.
 type Host interface {
-	// Call calls a Vim function and returns its decoded result.
+	Meta() Meta
+	// Call calls a Vim function and returns its decoded result. Arguments
+	// may be any value encoding/json can marshal; the editor sees the JSON
+	// shape (struct fields follow their json tags).
 	Call(ctx context.Context, fn string, args ...any) (any, error)
 	// Eval evaluates a Vim expression.
 	Eval(ctx context.Context, expr string) (any, error)
@@ -42,81 +42,76 @@ type Host interface {
 	Cmd(ctx context.Context, cmd string) error
 }
 
-// Source produces candidates.
-type Source interface {
-	Gather(ctx context.Context, h Host, c Context) ([]Candidate, error)
+// Handler serves one method of a plugin. params are generic decoded values:
+// nil, bool, int64, float64, string, []any and map[string]any, the same in
+// every editor. The result must be made of the same kinds (or of types that
+// round-trip through encoding/json, see Generic).
+type Handler func(ctx context.Context, h Host, params []any) (any, error)
+
+// Plugin is a unit of functionality served to the editor.
+//
+// The editor reaches a method as goda#request(Name(), method, args...). Names
+// are [a-z][a-z0-9_]* ("goda" is reserved), method names [A-Za-z_][A-Za-z0-9_]*.
+type Plugin interface {
+	Name() string
+	Handlers() map[string]Handler
 }
 
-// Filter transforms a candidate list (match, sort, convert).
-type Filter interface {
-	Filter(ctx context.Context, c Context, in []Candidate) ([]Candidate, error)
-}
-
-// GatherRequest is what the editor sends to run the completion pipeline.
-type GatherRequest struct {
-	Sources   []string `json:"sources"`
-	Filters   []string `json:"filters"`
-	Context   Context  `json:"context"`
-	TimeoutMs int      `json:"timeout_ms,omitempty"`
-}
-
-// ExtError reports a failure of a single extension without failing the rest.
-type ExtError struct {
-	Kind    string `json:"kind"` // "source", "filter" or "request"
-	Name    string `json:"name"`
-	Message string `json:"message"`
-}
-
-// GatherResult is the pipeline output.
-type GatherResult struct {
-	Candidates []Candidate `json:"candidates"`
-	Errors     []ExtError  `json:"errors"`
-}
-
-// Registry maps names used in configuration to extension instances.
-// It is filled once at startup and read-only afterwards.
-type Registry struct {
-	sources map[string]Source
-	filters map[string]Filter
-}
-
-func NewRegistry() *Registry {
-	return &Registry{sources: map[string]Source{}, filters: map[string]Filter{}}
-}
-
-// RegisterSource panics on an empty or duplicate name: that is a programming
-// error in the generated main, not a runtime condition.
-func (r *Registry) RegisterSource(name string, s Source) {
-	if name == "" || s == nil {
-		panic("sdk: RegisterSource: empty name or nil source")
+// Decode copies a generic value, such as an element of a Handler's params,
+// into dst (a pointer to a typed value). It goes through JSON, so json tags
+// apply and numbers convert whichever form they arrived in.
+func Decode(src, dst any) error {
+	b, err := json.Marshal(src)
+	if err != nil {
+		return err
 	}
-	if _, dup := r.sources[name]; dup {
-		panic(fmt.Sprintf("sdk: source %q registered twice", name))
-	}
-	r.sources[name] = s
+	return json.Unmarshal(b, dst)
 }
 
-func (r *Registry) RegisterFilter(name string, f Filter) {
-	if name == "" || f == nil {
-		panic("sdk: RegisterFilter: empty name or nil filter")
+// Generic converts a typed value (with json tags) into the generic form a
+// Handler may return. Numbers become json.Number, so integers stay integers
+// through any codec.
+func Generic(v any) (any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
 	}
-	if _, dup := r.filters[name]; dup {
-		panic(fmt.Sprintf("sdk: filter %q registered twice", name))
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var out any
+	if err := dec.Decode(&out); err != nil {
+		return nil, err
 	}
-	r.filters[name] = f
+	return out, nil
 }
 
-func (r *Registry) Source(name string) (Source, bool) { s, ok := r.sources[name]; return s, ok }
-func (r *Registry) Filter(name string) (Filter, bool) { f, ok := r.filters[name]; return f, ok }
-
-func (r *Registry) SourceNames() []string { return sortedKeys(r.sources) }
-func (r *Registry) FilterNames() []string { return sortedKeys(r.filters) }
-
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
+// Guard runs fn in its own goroutine so that a panic is recovered and a
+// function that ignores ctx cannot block the caller past its deadline. Use it
+// around code you do not control, such as third-party extensions.
+//
+// Go cannot kill a goroutine: after the deadline the function keeps running
+// until it returns, and its result is discarded.
+func Guard[T any](ctx context.Context, fn func() (T, error)) (T, error) {
+	type result struct {
+		v   T
+		err error
 	}
-	sort.Strings(out)
-	return out
+	ch := make(chan result, 1)
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				var zero T
+				ch <- result{zero, fmt.Errorf("panic: %v", p)}
+			}
+		}()
+		v, err := fn()
+		ch <- result{v, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.v, r.err
+	case <-ctx.Done():
+		var zero T
+		return zero, ctx.Err()
+	}
 }

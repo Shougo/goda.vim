@@ -2,7 +2,7 @@
 // the plugin binary with jobstart(..., {'rpc': v:true}) and talks to it with
 // rpcrequest(); the plugin calls back with nvim_call_function & co.
 //
-// The methods served to the editor are defined once, in core.Methods.
+// The method table (plugin.method -> handler) is built by package host.
 package nvim
 
 import (
@@ -11,18 +11,25 @@ import (
 	"log"
 	"os"
 
-	"github.com/Shougo/goda.vim/internal/core"
 	"github.com/Shougo/goda.vim/sdk"
 )
 
 // Host implements sdk.Host on top of Neovim's API.
 type Host struct{ c *rpc }
 
+func (h *Host) Meta() sdk.Meta { return sdk.Meta{Host: sdk.HostNvim} }
+
+// Call converts args to generic values first, so that structs (which the
+// msgpack codec does not know) can be passed as they can on Vim.
 func (h *Host) Call(ctx context.Context, fn string, args ...any) (any, error) {
 	if args == nil {
 		args = []any{}
 	}
-	return h.c.call(ctx, "nvim_call_function", fn, args)
+	norm, err := sdk.Generic(args)
+	if err != nil {
+		return nil, err
+	}
+	return h.c.call(ctx, "nvim_call_function", fn, norm)
 }
 
 func (h *Host) Eval(ctx context.Context, expr string) (any, error) {
@@ -34,22 +41,24 @@ func (h *Host) Cmd(ctx context.Context, cmd string) error {
 	return err
 }
 
-// Serve runs the plugin over stdin/stdout until Neovim closes the channel.
+// Serve runs the plugins over stdin/stdout until Neovim closes the channel.
 // stdout carries the protocol, so the process-wide os.Stdout is redirected to
-// stderr: a stray fmt.Println in an extension cannot corrupt the stream.
-func Serve(reg *sdk.Registry) error {
+// stderr: a stray fmt.Println in a plugin cannot corrupt the stream.
+func Serve(table map[string]sdk.Handler) error {
 	in, out := os.Stdin, os.Stdout
 	os.Stdout = os.Stderr
 	logger := log.New(os.Stderr, "goda: ", log.LstdFlags)
-	return ServeIO(context.Background(), in, out, reg, logger.Printf)
+	return ServeIO(context.Background(), in, out, table, logger.Printf)
 }
 
 // ServeIO is Serve over arbitrary streams (used by tests).
-func ServeIO(ctx context.Context, r io.Reader, w io.Writer, reg *sdk.Registry, logf func(string, ...any)) error {
+func ServeIO(ctx context.Context, r io.Reader, w io.Writer, table map[string]sdk.Handler, logf func(string, ...any)) error {
 	c := newRPC(r, w, logf)
 	host := &Host{c: c}
-	for name, fn := range core.Methods(reg, host) {
-		c.handle(name, handlerFunc(fn))
+	for name, fn := range table {
+		c.handle(name, func(ctx context.Context, params []any) (any, error) {
+			return fn(ctx, host, params)
+		})
 	}
 	return c.serve(ctx)
 }
