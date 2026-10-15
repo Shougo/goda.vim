@@ -62,13 +62,13 @@ cp goda.toml.example goda.toml          # [goda] replace = "." already points he
 ./goda-build -manifest goda.toml -o goda-host
 ```
 
-The same commands work in Vim and Neovim:
+The same calls work in Vim and Neovim:
 
 ```vim
 set rtp+=/path/to/goda.vim
-GodaStart /path/to/goda-host
-GodaList                                " registered sources and filters
-GodaLog                                 " what the plugin wrote to stderr
+call goda#start('/path/to/goda-host')
+echo goda#request('goda', 'plugins')    " registered plugins
+echo join(goda#log(), "\n")             " what the plugin wrote to stderr
 
 " Exercises the nested path: the plugin calls back into the editor (getcompletion)
 echo goda#gather({'sources': ['vim'], 'filters': [], 'context': {'complete_str': 'strl'}})
@@ -89,7 +89,7 @@ without `--transport` (default `nvim`).
 ## Layout
 
 ```
-autoload/ plugin/     Vim script side (both editors); must stay at the root,
+autoload/             Vim script side (both editors); must stay at the root,
                       plugin managers add the repository root to 'runtimepath'
 sdk/                  extension contract (public: extensions import this)
 cmd/goda-build/       the builder (public: go install)
@@ -118,10 +118,11 @@ hosts:
 * manifest -> generated module -> binary -> answered request, with an
   extension in its own module; the builder rebuilds without re-tidying
 
-**Neovim.** Reported working by the author on a real Neovim: `GodaStart`,
-`GodaList`, and the `vim` (editor callback) and `around` sources. The
-automated tests for this transport run against a *fake* editor written from
-the msgpack-rpc spec, because the sandbox this was built in has no `nvim`.
+**Neovim.** Reported working by the author on a real Neovim: `goda#start()`,
+`goda#request('goda', 'plugins')`, and the `vim` (editor callback) and
+`around` sources. The automated tests for this transport run against a *fake*
+editor written from the msgpack-rpc spec, because the sandbox this was built in
+has no `nvim`.
 
 **Vim.** An automated end-to-end test (`host/vim/vim_e2e_test.go`) starts a
 real Vim (9.1 here), loads the shipped `autoload/goda.vim`, runs the plugin
