@@ -21,13 +21,22 @@ endfunction
 let g:goda_request_timeout = 500
 
 try
-  call goda#start($GODA_BIN)
+  call add(s:out, "start\t" . json_encode(goda#start($GODA_BIN)))
 catch
   call add(s:out, "start\tEXC " . v:exception)
 endtry
-call add(s:out, "running\t" . goda#is_running())
+call add(s:out, "running\t" . goda#is_running('test'))
 
-call s:rec('plugins', {-> goda#request('goda', 'plugins')})
+" Starting the same binary again is a no-op; a second, independent binary
+" runs next to the first; a copy of the first (same plugin name) is refused;
+" a binary speaking another protocol is refused and not left running.
+call s:rec('start_again', {-> goda#start($GODA_BIN)})
+call s:rec('start_other', {-> goda#start($GODA_BIN2)})
+call s:rec('conflict', {-> goda#start($GODA_BIN_COPY)})
+call s:rec('old_protocol', {-> goda#start($GODA_BIN_OLD)})
+call s:rec('plugins', {-> sort(keys(goda#plugins()))})
+call s:rec('reserved', {-> goda#request('goda', 'plugins')})
+call s:rec('other_ping', {-> goda#request('other', 'ping')})
 call s:rec('echo', {-> goda#request('test', 'echo', 1, 2.5, 'x', [v:true, v:null], {'k': ['日本語']})})
 call s:rec('meta', {-> goda#request('test', 'meta')})
 
@@ -52,6 +61,13 @@ call s:rec('after_notify', {-> goda#request('test', 'echo', 'after notify')})
 sleep 2200m
 call s:rec('after_late_answer', {-> goda#request('test', 'echo', 'after the late answer')})
 call add(s:out, "log\t" . json_encode(goda#log()))
+
+" Stopping one plugin's binary leaves the other alone.
+call goda#stop('other')
+sleep 100m
+call add(s:out, "other_running\t" . goda#is_running('other'))
+call s:rec('other_after_stop', {-> goda#request('other', 'ping')})
+call s:rec('test_after_other_stop', {-> goda#request('test', 'echo', 'alive')})
 
 call goda#stop()
 sleep 100m

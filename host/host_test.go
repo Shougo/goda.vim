@@ -2,7 +2,10 @@ package host
 
 import (
 	"context"
+	"os"
 	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -27,12 +30,12 @@ func TestTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"cmp.complete", "cmp.gather", "skk.toggle", "goda.plugins"} {
+	for _, name := range []string{"cmp.complete", "cmp.gather", "skk.toggle", "goda.plugins", "goda.hello"} {
 		if table[name] == nil {
 			t.Errorf("method %s is missing", name)
 		}
 	}
-	if len(table) != 4 {
+	if len(table) != 5 {
 		t.Errorf("unexpected methods: %v", table)
 	}
 
@@ -43,6 +46,42 @@ func TestTable(t *testing.T) {
 	want := map[string]any{"cmp": []any{"complete", "gather"}, "skk": []any{"toggle"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("goda.plugins = %v, want %v", got, want)
+	}
+}
+
+func TestHello(t *testing.T) {
+	table, err := Table(testPlugin{"cmp", map[string]sdk.Handler{"complete": nop}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := table["goda.hello"](context.Background(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := got.(map[string]any)
+	if m["protocol"] != int64(sdk.Protocol) {
+		t.Errorf("protocol = %v, want %d", m["protocol"], sdk.Protocol)
+	}
+	if v, _ := m["version"].(string); v == "" {
+		t.Errorf("version = %v", m["version"])
+	}
+	if !reflect.DeepEqual(m["plugins"], map[string]any{"cmp": []any{"complete"}}) {
+		t.Errorf("plugins = %v", m["plugins"])
+	}
+}
+
+// autoload/goda.vim must expect the protocol this module implements.
+func TestVimScriptProtocol(t *testing.T) {
+	b, err := os.ReadFile("../autoload/goda.vim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?m)^let s:protocol = (\d+)\s*$`).FindSubmatch(b)
+	if m == nil {
+		t.Fatal("autoload/goda.vim has no 'let s:protocol = N' line")
+	}
+	if got, want := string(m[1]), strconv.Itoa(sdk.Protocol); got != want {
+		t.Errorf("autoload/goda.vim s:protocol = %s, sdk.Protocol = %s", got, want)
 	}
 }
 

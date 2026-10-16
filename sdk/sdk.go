@@ -14,6 +14,13 @@ import (
 	"fmt"
 )
 
+// Protocol is the version of the contract between the Vim script side
+// (autoload/goda.vim) and a plugin binary: the transports, the method naming
+// and the goda.hello handshake. It is bumped only when an old binary and a new
+// autoload (or the reverse) can no longer work together. autoload/goda.vim
+// carries the same number (s:protocol); a test keeps them equal.
+const Protocol = 1
+
 // Editors reported by Meta.Host.
 const (
 	HostVim  = "vim"

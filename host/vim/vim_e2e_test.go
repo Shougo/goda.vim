@@ -50,11 +50,35 @@ func TestRealVim(t *testing.T) {
 		t.Fatalf("building the plugin: %v\n%s", err, b)
 	}
 
+	bin2 := filepath.Join(dir, "plugin2")
+	build2 := exec.Command("go", "build", "-o", bin2, "./host/vim/testdata/plugin2")
+	build2.Dir = root
+	build2.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if b, err := build2.CombinedOutput(); err != nil {
+		t.Fatalf("building the second plugin: %v\n%s", err, b)
+	}
+	// Same plugin name as bin, other path.
+	binCopy := filepath.Join(dir, "plugin-copy")
+	data, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binCopy, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Answers the handshake with a protocol version nobody speaks.
+	binOld := filepath.Join(dir, "plugin-old")
+	oldScript := "#!/bin/sh\nread line\necho '[1,{\"result\":{\"protocol\":99,\"version\":\"x\",\"plugins\":{}}}]'\nsleep 3\n"
+	if err := os.WriteFile(binOld, []byte(oldScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, vimBin, "-u", "NONE", "-i", "NONE", "-N", "-es", "-S", script)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GODA_BIN="+bin, "GODA_RTP="+root, "GODA_OUT="+out)
+	cmd.Env = append(os.Environ(), "GODA_BIN="+bin, "GODA_RTP="+root, "GODA_OUT="+out,
+		"GODA_BIN2="+bin2, "GODA_BIN_COPY="+binCopy, "GODA_BIN_OLD="+binOld)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("vim: %v\n%s", err, b)
 	}
@@ -70,17 +94,22 @@ func TestRealVim(t *testing.T) {
 	}
 	t.Logf("results:\n%s", raw)
 
-	if res["start"] != "" {
-		t.Fatalf("goda#start failed: %s", res["start"])
+	if res["start"] != `["test"]` {
+		t.Fatalf("goda#start = %s, want [\"test\"]", res["start"])
 	}
 	if res["running"] != "1" {
 		t.Errorf("running = %q, want 1", res["running"])
 	}
 
 	want := map[string]string{
-		"plugins": `{"test":["callback","echo","meta","probe","shout","slow","struct"]}`,
-		"echo":    `[1,2.5,"x",[true,null],{"k":["日本語"]}]`,
-		"meta":    `"vim"`,
+		"start_again":           `["test"]`,
+		"start_other":           `["other"]`,
+		"plugins":               `["other","test"]`,
+		"other_ping":            `"pong"`,
+		"other_running":         "0",
+		"test_after_other_stop": `["alive"]`,
+		"echo":                  `[1,2.5,"x",[true,null],{"k":["日本語"]}]`,
+		"meta":                  `"vim"`,
 		// Still usable after a request timed out, after a notification, and
 		// after the late answer of the timed-out request arrived.
 		"after_slow":        `["still alive"]`,
@@ -128,9 +157,16 @@ func TestRealVim(t *testing.T) {
 		t.Errorf("stdout should be redirected to the log (stderr), log = %s", res["log"])
 	}
 
-	for _, name := range []string{"unknown_method", "unknown_plugin"} {
-		if v := res[name]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, "unknown method") {
-			t.Errorf("%s = %q, want an exception", name, v)
+	for name, want := range map[string]string{
+		"unknown_method":   "unknown method",
+		"unknown_plugin":   "unknown plugin",
+		"reserved":         "reserved",
+		"conflict":         "already served",
+		"old_protocol":     "protocol 99",
+		"other_after_stop": "unknown plugin",
+	} {
+		if v := res[name]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, want) {
+			t.Errorf("%s = %q, want an exception mentioning %q", name, v, want)
 		}
 	}
 	if v := res["slow"]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, "no answer") {

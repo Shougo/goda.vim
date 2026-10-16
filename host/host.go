@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strings"
 
@@ -26,7 +27,7 @@ import (
 var Transports = []string{"nvim", "vim", "jsonl"}
 
 // Reserved is the plugin name of the methods goda.vim itself provides
-// (currently goda.plugins).
+// (goda.plugins and the goda.hello handshake).
 const Reserved = "goda"
 
 var (
@@ -66,7 +67,8 @@ func Serve(transport string, plugins ...sdk.Plugin) error {
 
 // Table flattens the plugins into the method table the transports serve, keyed
 // by "plugin.method". It also adds goda.plugins, which answers with
-// {plugin: [methods...]}.
+// {plugin: [methods...]}, and goda.hello, the handshake the editor performs
+// right after starting the binary: {protocol, version, plugins}.
 func Table(plugins ...sdk.Plugin) (map[string]sdk.Handler, error) {
 	table := map[string]sdk.Handler{}
 	listing := map[string]any{}
@@ -109,5 +111,35 @@ func Table(plugins ...sdk.Plugin) (map[string]sdk.Handler, error) {
 	table[Reserved+".plugins"] = func(context.Context, sdk.Host, []any) (any, error) {
 		return listing, nil
 	}
+	table[Reserved+".hello"] = func(context.Context, sdk.Host, []any) (any, error) {
+		return map[string]any{
+			"protocol": int64(sdk.Protocol),
+			"version":  moduleVersion(),
+			"plugins":  listing,
+		}, nil
+	}
 	return table, nil
+}
+
+// moduleVersion is the version of goda.vim this binary was built with, as far
+// as the Go toolchain recorded it. It is informational; compatibility is
+// decided by sdk.Protocol.
+func moduleVersion() string {
+	const path = "github.com/Shougo/goda.vim"
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	if info.Main.Path == path {
+		return info.Main.Version // "(devel)" when built inside the module
+	}
+	for _, d := range info.Deps {
+		if d.Path == path {
+			if d.Replace != nil {
+				return d.Replace.Version + " (replaced)"
+			}
+			return d.Version
+		}
+	}
+	return "unknown"
 }
