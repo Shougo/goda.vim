@@ -156,7 +156,7 @@ request is routed by plugin name to the binary that contains the plugin, so
 `goda-cmp`, `goda-ff` and so on are built, started, updated and restarted
 independently of each other. If one crashes the others are unaffected.
 
-`g:goda_request_timeout` (default 10000, in ms) bounds a blocking request in
+`g:goda#request_timeout` (default 10000, in ms) bounds a blocking request in
 Vim. There are no commands; everything is a function.
 
 ## Versions

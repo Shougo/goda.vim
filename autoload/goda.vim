@@ -132,7 +132,7 @@ function! goda#start(bin) abort
           \ 'err_mode': 'nl',
           \ 'err_cb': function('s:vim_on_stderr', [l:inst]),
           \ 'exit_cb': function('s:vim_on_exit', [l:inst]),
-          \ 'timeout': get(g:, 'goda_request_timeout', 10000),
+          \ 'timeout': get(g:, 'goda#request_timeout', 10000),
           \ 'noblock': 1,
           \ })
     if job_status(l:inst.job) !=# 'run'

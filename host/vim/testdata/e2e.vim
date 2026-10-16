@@ -18,7 +18,7 @@ function! s:rec(name, Fn) abort
 endfunction
 
 " A short request timeout, to see what a plugin that answers too late does.
-let g:goda_request_timeout = 500
+let g:goda#request_timeout = 500
 
 try
   call add(s:out, "start\t" . json_encode(goda#start($GODA_BIN)))
