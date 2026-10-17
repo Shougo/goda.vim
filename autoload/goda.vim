@@ -100,7 +100,7 @@ endfunction
 
 " Start a plugin binary and return the names of the plugins it contains. Safe
 " to call again for a binary that is already running. Throws if the binary
-" cannot be started, speaks another protocol version (rebuild it), or contains
+" cannot be started, speaks another protocol version (update and rebuild it), or contains
 " a plugin whose name another running binary already serves.
 function! goda#start(bin) abort
   let l:bin = fnamemodify(expand(a:bin), ':p')
@@ -146,13 +146,16 @@ function! goda#start(bin) abort
   catch
     let l:msg = v:exception
     call s:kill(l:inst)
-    throw 'goda: handshake with ' . l:bin . ' failed (built with an older goda.vim? rebuild it): ' . l:msg
+    throw 'goda: handshake with ' . l:bin . ' failed: ' . l:msg
+          \ . "\n  The binary was probably built with an older goda.vim module. Update it in the Go module"
+          \ . " that builds the binary (go get -u github.com/Shougo/goda.vim) and build again."
   endtry
   let l:theirs = type(l:hello) == v:t_dict ? get(l:hello, 'protocol', 0) : 0
   if l:theirs != s:protocol
     call s:kill(l:inst)
     throw 'goda: ' . l:bin . ' speaks protocol ' . l:theirs . ', this goda.vim expects ' . s:protocol
-          \ . '; rebuild the binary (or update goda.vim)'
+          \ . '; update the goda.vim module in the Go module that builds the binary'
+          \ . ' (go get -u github.com/Shougo/goda.vim) and build again, or update the goda.vim plugin'
   endif
   let l:plugins = sort(keys(l:hello.plugins))
   for l:name in l:plugins
