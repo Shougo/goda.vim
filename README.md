@@ -82,8 +82,6 @@ go mod tidy
 go build -o hello .
 ```
 
-(While the code is on the `wip` branch, use `go get github.com/Shougo/goda.vim@wip`.)
-
 Then, in Vim or Neovim (adjust the paths):
 
 ```vim
