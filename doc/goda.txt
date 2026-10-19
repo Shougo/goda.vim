@@ -2,7 +2,7 @@
 
 License: MIT license
 
-CONTENTS						*goda-contents*
+CONTENTS                                                       *goda-contents*
 
 Introduction		|goda-introduction|
 Install			|goda-install|
@@ -14,7 +14,7 @@ AI			|goda-ai|
 FAQ			|goda-faq|
 
 ==============================================================================
-INTRODUCTION						*goda-introduction*
+INTRODUCTION                                               *goda-introduction*
 
 goda.vim is a framework for plugins written in Go, for both Vim and Neovim.
 It moves messages between the editor and plugin binaries, and lets a plugin
@@ -34,7 +34,7 @@ compiler checks the whole program.  Building needs Go; running does not.
 There are no commands.  Everything is a function.
 
 ==============================================================================
-INSTALL							*goda-install*
+INSTALL                                                         *goda-install*
 
 Requirements:
 - Vim 9.1 or later built with |+job|, |+channel| and |+timers|, or Neovim.
@@ -45,9 +45,9 @@ user or by the plugin that ships it (see |goda_cmp#build()|), and started
 with |goda#start()|.
 
 ==============================================================================
-FUNCTIONS						*goda-functions*
+FUNCTIONS                                                     *goda-functions*
 
-							*goda#start()*
+                                                                *goda#start()*
 goda#start({bin})
 		Start the plugin binary {bin}, and return the list of the
 		names of the plugins it serves.  It throws when the binary
@@ -56,53 +56,53 @@ goda#start({bin})
 		running binary already serves.  Calling it again for a binary
 		that is running does nothing.
 
-							*goda#stop()*
+                                                                 *goda#stop()*
 goda#stop([{plugin}])
 		Stop the binary serving {plugin}, or all binaries when it is
 		omitted.  The binary is told to stop with SIGTERM and its
 		plugins' `Close` is called (see |goda-plugin|).
 
-							*goda#request()*
+                                                              *goda#request()*
 goda#request({plugin}, {method} [, {arg}...])
 		Call {method} of {plugin} and wait for the result.  Throws
 		when the call fails or takes longer than
 		|g:goda#request_timeout|.
 
-							*goda#notify()*
+                                                               *goda#notify()*
 goda#notify({plugin}, {method} [, {arg}...])
 		Call {method} of {plugin} without waiting for an answer.
 		Errors are logged (see |goda#log()|).
 
-							*goda#plugins()*
+                                                              *goda#plugins()*
 goda#plugins()
 		Return a |Dictionary| {plugin name: binary} of what is running.
 
-							*goda#is_running()*
+                                                           *goda#is_running()*
 goda#is_running([{plugin}])
 		Return 1 when the binary serving {plugin} is running (any
 		binary when omitted).
 
-							*goda#log()*
+                                                                  *goda#log()*
 goda#log([{plugin}])
 		Return a |List| of what the binary wrote to stderr.  Kept
 		after the binary exited.  Start here when something does not
 		work.
 
 ==============================================================================
-VARIABLES						*goda-variables*
+VARIABLES                                                     *goda-variables*
 
-							*g:goda#request_timeout*
+                                                      *g:goda#request_timeout*
 g:goda#request_timeout
 		Time in milliseconds a blocking |goda#request()| may take in
 		Vim.  Default: 10000
 
 ==============================================================================
-WRITING A PLUGIN					*goda-plugin*
+WRITING A PLUGIN                                                 *goda-plugin*
 
 A plugin is a Go value implementing `sdk.Plugin`: a name
 ([a-z][a-z0-9_]*, "goda" is reserved) and a map from method names to
 handlers `func(ctx, h sdk.Host, params []any) (any, error)`.  The binary's
-`main` is one line: >
+`main` is one line: >go
 
 	func main() { host.Main(myplugin.New(), otherplugin.New()) }
 <
@@ -138,7 +138,7 @@ per line on stdin: >
 Calls into the editor fail in this mode.
 
 ==============================================================================
-VERSIONS						*goda-versions*
+VERSIONS                                                       *goda-versions*
 
 When a binary is started, the editor and the binary exchange a handshake
 (`goda.hello`): the protocol version, the version of goda.vim the binary was
@@ -152,7 +152,7 @@ and build again.  The protocol version changes only when an old binary and a
 new Vim script can no longer work together.
 
 ==============================================================================
-AI							*goda-ai*
+AI                                                                   *goda-ai*
 
 AI-assisted, not AI-dependent.
 
@@ -160,7 +160,7 @@ AI is used as a tool to speed up development, but goda.vim and the plugins in
 this project are not built on the assumption that AI exists.
 
 ==============================================================================
-FAQ							*goda-faq*
+FAQ                                                                 *goda-faq*
 
 Q: "unknown method goda.hello" when starting a binary.
 A: The binary was built with an old goda.vim module.  Update it as described
