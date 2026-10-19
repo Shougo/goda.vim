@@ -197,6 +197,11 @@ go test -short ./... # without starting Vim
 The Vim transport is tested against a real Vim; the Neovim transport only
 against a fake editor written from the msgpack-rpc specification.
 
+## AI-assisted, not AI-dependent
+
+AI is used as a tool to speed up development, but goda.vim and the plugins in
+this project are not built on the assumption that AI exists.
+
 ## Status
 
 Checked: `go vet`, `go test` (and `-race`), the Vim transport and the Vim
