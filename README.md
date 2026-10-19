@@ -25,16 +25,10 @@ that are linked into the binary at build time.
 Do not name a plugin binary `goda`: `go install github.com/loov/goda@latest`
 (an unrelated tool) installs that name.
 
-## Requirements
-
-* Go 1.24 or newer, to build plugins.
-* Vim 9.1 or newer with `+job` and `+channel` (and `+timers` for plugins that
-  use timers), or Neovim.
-
 ## Try it
 
-This builds and calls a plugin of ten lines. Nothing but Go and the editor is
-needed.
+This builds and calls a plugin of ten lines. You need Go 1.24 or newer and
+Vim 9.1 or newer (with `+job` and `+channel`) or Neovim.
 
 ```sh
 mkdir hello && cd hello
@@ -82,6 +76,8 @@ go mod tidy
 go build -o hello .
 ```
 
+(While the code is on the `wip` branch, use `go get github.com/Shougo/goda.vim@wip`.)
+
 Then, in Vim or Neovim (adjust the paths):
 
 ```vim
@@ -103,78 +99,11 @@ echo '{"method":"goda.plugins"}' | ./hello --transport=jsonl
 # {"result":{"hello":["greet"]}}
 ```
 
-## Writing a plugin
+## Documentation
 
-A plugin implements `sdk.Plugin`:
-
-```go
-type Plugin interface {
-	Name() string                      // [a-z][a-z0-9_]*; "goda" is reserved
-	Handlers() map[string]sdk.Handler  // method name -> handler
-}
-
-type Handler func(ctx context.Context, h sdk.Host, params []any) (any, error)
-```
-
-`host.Main(plugins...)` serves any number of plugins from one binary and
-exits when the editor closes the connection.
-
-* **Parameters and results** are generic values: `nil`, `bool`, `int64`,
-  `float64`, `string`, `[]any` and `map[string]any`, the same in both editors.
-  `sdk.Decode(params[0], &typed)` copies one into a struct (json tags apply);
-  `sdk.Generic(v)` converts a struct into a result.
-* **The editor** is `sdk.Host`: `Call(ctx, fn, args...)` calls a Vim function,
-  `Eval` evaluates an expression, `Cmd` runs an Ex command, `Meta().Host` is
-  `"vim"` or `"nvim"`. They may be used from inside a handler while the editor
-  waits for its answer. Errors from the editor come back as Go errors.
-* **Requests run concurrently**, each in its own goroutine, and are not
-  ordered: two notifications can be handled in the opposite order. Carry a
-  sequence number if order matters. Use `sdk.Guard` around code you do not
-  control, to recover from panics and enforce a deadline.
-* **stdout belongs to the protocol.** `fmt.Println` is redirected to stderr
-  so it cannot corrupt the channel; use stderr or `log` for diagnostics, and
-  read it with `goda#log()`.
-* **Closing.** A plugin that holds something to release (a child process, a
-  connection) implements `sdk.Closer` (`Close(ctx) error`). The host calls it
-  once, when the editor closed the connection or the process got SIGTERM or an
-  interrupt (which is how `goda#stop()` ends a binary), last registered plugin
-  first. The editor is gone then, so there is no `Host`, and requests may still
-  be running. All plugins together get `host.CloseTimeout` (3 seconds).
-* **Errors** returned by a handler reach the editor as an exception
-  (`goda#request`) or are logged (notifications).
-
-## Vim script API
-
-| function | |
-|---|---|
-| `goda#start(bin)` | Start a plugin binary; returns the names of its plugins. Throws if it cannot be started, speaks another protocol version, or contains a plugin name another running binary serves. Calling it again for a running binary does nothing. |
-| `goda#stop([plugin])` | Stop the binary serving `plugin`, or all binaries. |
-| `goda#request(plugin, method, args...)` | Blocking call; returns the result or throws. |
-| `goda#notify(plugin, method, args...)` | Fire and forget. |
-| `goda#plugins()` | `{plugin: binary}` of what is running. |
-| `goda#is_running([plugin])` | |
-| `goda#log([plugin])` | What the binary wrote to stderr (kept after it exited). |
-
-Any number of binaries can run side by side, each started independently. A
-request is routed by plugin name to the binary that contains the plugin, so
-`goda-cmp`, `goda-ff` and so on are built, started, updated and restarted
-independently of each other. If one crashes the others are unaffected.
-
-`g:goda#request_timeout` (default 10000, in ms) bounds a blocking request in
-Vim. There are no commands; everything is a function.
-
-## Help
-
-`:help goda` (doc/goda.txt).
-
-## Versions
-
-When a binary is started, the editor and the binary exchange a handshake
-(`goda.hello`): the protocol version, the version of goda.vim the binary was
-built with, and the plugin names. If the protocol versions differ, `goda#start`
-throws and asks you to rebuild the binary: after updating goda.vim (or a plugin
-that bundles it), rebuild. The protocol version changes only when an old binary
-and a new Vim script can no longer work together.
+`:help goda` ([doc/goda.txt](doc/goda.txt)): the Vim script functions and
+variables, writing a plugin (the `sdk` interfaces, `sdk.Closer`), and versions
+and the handshake.
 
 ## How it works
 
