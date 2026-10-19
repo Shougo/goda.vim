@@ -7,7 +7,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Shougo/goda.vim/sdk"
 )
@@ -123,5 +125,57 @@ func TestServeTransportErrors(t *testing.T) {
 	// Plugin errors win over transport errors: nothing is served half-configured.
 	if err := Serve("nvim", testPlugin{"BAD", nil}); err == nil || !strings.Contains(err.Error(), "must match") {
 		t.Errorf("got %v", err)
+	}
+}
+
+var closeMu sync.Mutex
+
+type closerPlugin struct {
+	testPlugin
+	log    *[]string
+	err    error
+	panics bool
+	block  bool
+}
+
+func (p closerPlugin) Close(ctx context.Context) error {
+	closeMu.Lock()
+	*p.log = append(*p.log, p.name)
+	closeMu.Unlock()
+	if p.panics {
+		panic("boom")
+	}
+	if p.block {
+		<-ctx.Done()
+	}
+	return p.err
+}
+
+func TestClosePlugins(t *testing.T) {
+	var log []string
+	plugins := []sdk.Plugin{
+		closerPlugin{testPlugin: testPlugin{name: "a"}, log: &log},
+		testPlugin{name: "plain"}, // no Close: skipped
+		closerPlugin{testPlugin: testPlugin{name: "b"}, log: &log, panics: true},
+		closerPlugin{testPlugin: testPlugin{name: "c"}, log: &log, err: context.Canceled},
+	}
+	closePlugins(plugins, time.Second)
+	// Last registered first; a panic or error does not stop the others.
+	closeMu.Lock()
+	defer closeMu.Unlock()
+	if !reflect.DeepEqual(log, []string{"c", "b", "a"}) {
+		t.Errorf("close order = %v, want [c b a]", log)
+	}
+}
+
+func TestClosePluginsTimeout(t *testing.T) {
+	var log []string
+	start := time.Now()
+	closePlugins([]sdk.Plugin{
+		closerPlugin{testPlugin: testPlugin{name: "a"}, log: &log},
+		closerPlugin{testPlugin: testPlugin{name: "stuck"}, log: &log, block: true},
+	}, 100*time.Millisecond)
+	if time.Since(start) > time.Second {
+		t.Errorf("closePlugins did not give up")
 	}
 }

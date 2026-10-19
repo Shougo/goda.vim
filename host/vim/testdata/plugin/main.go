@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -16,6 +17,19 @@ import (
 type testPlugin struct{}
 
 func (testPlugin) Name() string { return "test" }
+
+// Close records that the host told the plugin to stop (sdk.Closer).
+func (testPlugin) Close(context.Context) error {
+	if path := os.Getenv("GODA_CLOSE_FILE"); path != "" {
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		fmt.Fprintln(f, "closed")
+	}
+	return nil
+}
 
 func (testPlugin) Handlers() map[string]sdk.Handler {
 	return map[string]sdk.Handler{

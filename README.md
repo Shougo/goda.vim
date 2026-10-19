@@ -134,6 +134,12 @@ exits when the editor closes the connection.
 * **stdout belongs to the protocol.** `fmt.Println` is redirected to stderr
   so it cannot corrupt the channel; use stderr or `log` for diagnostics, and
   read it with `goda#log()`.
+* **Closing.** A plugin that holds something to release (a child process, a
+  connection) implements `sdk.Closer` (`Close(ctx) error`). The host calls it
+  once, when the editor closed the connection or the process got SIGTERM or an
+  interrupt (which is how `goda#stop()` ends a binary), last registered plugin
+  first. The editor is gone then, so there is no `Host`, and requests may still
+  be running. All plugins together get `host.CloseTimeout` (3 seconds).
 * **Errors** returned by a handler reach the editor as an exception
   (`goda#request`) or are logged (notifications).
 
@@ -156,6 +162,10 @@ independently of each other. If one crashes the others are unaffected.
 
 `g:goda#request_timeout` (default 10000, in ms) bounds a blocking request in
 Vim. There are no commands; everything is a function.
+
+## Help
+
+`:help goda` (doc/goda.txt).
 
 ## Versions
 

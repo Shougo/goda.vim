@@ -64,6 +64,17 @@ type Plugin interface {
 	Handlers() map[string]Handler
 }
 
+// Closer is implemented by plugins that hold something to release (a child
+// process, a connection, a file). The host calls Close once, when the editor
+// closed the connection or the process was told to stop (SIGTERM, interrupt).
+// Requests may still be running then, and the editor is gone: there is no
+// Host. Close should return promptly; the host gives all plugins together a
+// few seconds (host.CloseTimeout) and then exits. Plugins are closed in the
+// reverse order of their registration.
+type Closer interface {
+	Close(ctx context.Context) error
+}
+
 // Decode copies a generic value, such as an element of a Handler's params,
 // into dst (a pointer to a typed value). It goes through JSON, so json tags
 // apply and numbers convert whichever form they arrived in.

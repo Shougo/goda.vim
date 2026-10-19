@@ -12,10 +12,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"regexp"
 	"runtime/debug"
 	"sort"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/Shougo/goda.vim/host/jsonl"
 	"github.com/Shougo/goda.vim/host/nvim"
@@ -35,6 +38,9 @@ var (
 	methodName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
 
+// CloseTimeout bounds the time all plugins together get for sdk.Closer.
+var CloseTimeout = 3 * time.Second
+
 // Main serves the plugins and exits the process. It returns normally only
 // when the editor closed the channel.
 func Main(plugins ...sdk.Plugin) {
@@ -46,23 +52,60 @@ func Main(plugins ...sdk.Plugin) {
 	}
 }
 
-// Serve is Main without flag parsing and without exiting.
+// Serve is Main without flag parsing and without exiting. It returns when the
+// editor closed the connection, the transport failed, or the process got
+// SIGTERM or an interrupt; in every case the plugins implementing sdk.Closer
+// have been closed by then.
 func Serve(transport string, plugins ...sdk.Plugin) error {
 	table, err := Table(plugins...)
 	if err != nil {
 		return err
 	}
+	var serve func(map[string]sdk.Handler) error
 	switch transport {
 	case "nvim":
-		return nvim.Serve(table)
+		serve = nvim.Serve
 	case "vim":
-		return vim.Serve(table)
+		serve = vim.Serve
 	case "jsonl":
-		return jsonl.Serve(table)
+		serve = jsonl.Serve
 	case "":
 		return fmt.Errorf("--transport is required (%s)", strings.Join(Transports, ", "))
+	default:
+		return fmt.Errorf("unknown transport %q (want %s)", transport, strings.Join(Transports, ", "))
 	}
-	return fmt.Errorf("unknown transport %q (want %s)", transport, strings.Join(Transports, ", "))
+
+	// The editor stops a job with SIGTERM (job_stop(), jobstop(), and when
+	// it exits), so that is the usual way to learn about the end.
+	sig, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	errc := make(chan error, 1)
+	go func() { errc <- serve(table) }()
+	var serveErr error
+	select {
+	case serveErr = <-errc:
+	case <-sig.Done():
+	}
+	closePlugins(plugins, CloseTimeout)
+	return serveErr
+}
+
+// closePlugins calls sdk.Closer on the plugins, last registered first, within
+// timeout altogether. A panic or an error is reported on stderr and does not
+// stop the others.
+func closePlugins(plugins []sdk.Plugin, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	for i := len(plugins) - 1; i >= 0; i-- {
+		c, ok := plugins[i].(sdk.Closer)
+		if !ok {
+			continue
+		}
+		_, err := sdk.Guard(ctx, func() (struct{}, error) { return struct{}{}, c.Close(ctx) })
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "goda: plugin %s: close: %v\n", plugins[i].Name(), err)
+		}
+	}
 }
 
 // Table flattens the plugins into the method table the transports serve, keyed

@@ -77,7 +77,8 @@ func TestRealVim(t *testing.T) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, vimBin, "-u", "NONE", "-i", "NONE", "-N", "-es", "-S", script)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GODA_BIN="+bin, "GODA_RTP="+root, "GODA_OUT="+out,
+	closeFile := filepath.Join(dir, "closed.txt")
+	cmd.Env = append(os.Environ(), "GODA_CLOSE_FILE="+closeFile, "GODA_BIN="+bin, "GODA_RTP="+root, "GODA_OUT="+out,
 		"GODA_BIN2="+bin2, "GODA_BIN_COPY="+binCopy, "GODA_BIN_OLD="+binOld)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("vim: %v\n%s", err, b)
@@ -121,6 +122,18 @@ func TestRealVim(t *testing.T) {
 		if res[name] != w {
 			t.Errorf("%s = %s\n  want %s", name, res[name], w)
 		}
+	}
+
+	// goda#stop() ends the job with SIGTERM, and the host must have called
+	// the plugin's Close (sdk.Closer) before exiting.
+	var closed []byte
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if closed, _ = os.ReadFile(closeFile); len(closed) > 0 {
+			break
+		}
+	}
+	if !strings.Contains(string(closed), "closed") {
+		t.Errorf("Close was not called when the job was stopped (file: %q)", closed)
 	}
 
 	// The plugin's getcompletion call ran inside this Vim. (Vim's function
