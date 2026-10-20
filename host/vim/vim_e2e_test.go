@@ -74,13 +74,20 @@ func TestRealVim(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Exits before the handshake with a reason on stderr.
+	binExits := filepath.Join(dir, "plugin-exits")
+	exitsScript := "#!/bin/sh\necho 'configuration: unknown filter \"zz\"' >&2\nexit 3\n"
+	if err := os.WriteFile(binExits, []byte(exitsScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, vimBin, "-u", "NONE", "-i", "NONE", "-N", "-es", "-S", script)
 	cmd.Dir = dir
 	closeFile := filepath.Join(dir, "closed.txt")
 	cmd.Env = append(os.Environ(), "GODA_CLOSE_FILE="+closeFile, "GODA_BIN="+bin, "GODA_RTP="+root, "GODA_OUT="+out,
-		"GODA_BIN2="+bin2, "GODA_BIN_COPY="+binCopy, "GODA_BIN_OLD="+binOld)
+		"GODA_BIN2="+bin2, "GODA_BIN_COPY="+binCopy, "GODA_BIN_OLD="+binOld, "GODA_BIN_EXITS="+binExits)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("vim: %v\n%s", err, b)
 	}
@@ -182,6 +189,14 @@ func TestRealVim(t *testing.T) {
 		if v := res[name]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, want) {
 			t.Errorf("%s = %q, want an exception mentioning %q", name, v, want)
 		}
+	}
+	// The reason the binary gave, not a guess about module versions.
+	if v := res["exits"]; !strings.Contains(v, "exited during the handshake (status 3)") ||
+		!strings.Contains(v, `unknown filter "zz"`) || strings.Contains(v, "older goda.vim") {
+		t.Errorf("exits = %q", v)
+	}
+	if v := res["exits_log"]; !strings.Contains(v, "[plugin-exits] configuration: unknown filter") {
+		t.Errorf("goda#log() after a failed start = %s", v)
 	}
 	if v := res["slow"]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, "no answer") {
 		t.Errorf("slow = %q, want a 'no answer' exception", v)

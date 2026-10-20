@@ -18,7 +18,10 @@ let s:protocol = 1
 
 let s:instances = {}  " binary path -> instance
 let s:routes = {}     " plugin name -> instance
-" An instance is {'bin', 'job' (Vim), 'chan' (Neovim), 'log', 'plugins'}.
+let s:failed = {}     " binary path -> instance whose start failed (for goda#log())
+" An instance is {'bin', 'job' (Vim), 'chan' and 'job_id' (Neovim), 'log',
+" 'plugins', 'status'}. status is the exit status once the process ended,
+" v:null before.
 
 function! s:log_add(inst, lines) abort
   call extend(a:inst.log, filter(copy(a:lines), 'v:val !=# ""'))
@@ -33,6 +36,7 @@ endfunction
 
 function! s:nvim_on_exit(inst, job_id, code, event) abort
   let a:inst.chan = 0
+  let a:inst.status = a:code
   call s:log_add(a:inst, ['goda: ' . a:inst.bin . ' exited with code ' . a:code])
 endfunction
 
@@ -44,6 +48,7 @@ function! s:vim_on_exit(inst, job, status) abort
   if a:inst.job is a:job
     let a:inst.job = v:null
   endif
+  let a:inst.status = a:status
   call s:log_add(a:inst, ['goda: ' . a:inst.bin . ' exited with status ' . a:status])
 endfunction
 
@@ -64,6 +69,35 @@ function! s:kill(inst) abort
     call job_stop(a:inst.job)
     let a:inst.job = v:null
   endif
+endfunction
+
+" Waits up to TIMEOUT ms for the process to end, and returns its exit status,
+" or v:null when it is still running. Its stderr has been read by then.
+function! s:wait_exit(inst, timeout) abort
+  if has('nvim')
+    " jobwait() also runs the on_stderr and on_exit callbacks.
+    let l:r = jobwait([a:inst.job_id], a:timeout)[0]
+    if l:r == -1
+      return v:null
+    endif
+    return a:inst.status is v:null ? l:r : a:inst.status
+  endif
+  let l:waited = 0
+  while a:inst.status is v:null && l:waited < a:timeout
+    " job_status() notices the end and runs exit_cb; sleeping lets the
+    " err_cb lines in.
+    if a:inst.job isnot v:null && job_status(a:inst.job) !=# 'run'
+      break
+    endif
+    sleep 10m
+    let l:waited += 10
+  endwhile
+  if a:inst.job isnot v:null
+    call job_status(a:inst.job)
+  endif
+  " The last stderr lines may still be on their way.
+  sleep 20m
+  return a:inst.status
 endfunction
 
 " Blocking call of a method of one binary, by its full name ('plugin.method').
@@ -112,7 +146,7 @@ function! goda#start(bin) abort
     return copy(l:old.plugins)
   endif
 
-  let l:inst = {'bin': l:bin, 'job': v:null, 'chan': 0, 'log': [], 'plugins': []}
+  let l:inst = {'bin': l:bin, 'job': v:null, 'chan': 0, 'job_id': 0, 'log': [], 'plugins': [], 'status': v:null}
   if has('nvim')
     let l:chan = jobstart([l:bin, '--transport=nvim'], {
           \ 'rpc': v:true,
@@ -123,6 +157,7 @@ function! goda#start(bin) abort
       throw 'goda: failed to start ' . l:bin
     endif
     let l:inst.chan = l:chan
+    let l:inst.job_id = l:chan
   else
     if !has('job') || !has('channel')
       throw 'goda: this Vim was built without +job/+channel'
@@ -145,11 +180,23 @@ function! goda#start(bin) abort
     let l:hello = s:rpc(l:inst, 'goda.hello', [])
   catch
     let l:msg = v:exception
+    let l:status = s:wait_exit(l:inst, 1000)
     call s:kill(l:inst)
+    let s:failed[l:bin] = l:inst
+    if l:status isnot v:null
+      " It ended by itself (a configuration error, a crash): what it wrote
+      " to stderr says why.
+      let l:lines = filter(copy(l:inst.log), 'v:val !~# "^goda: .* exited with "')
+      throw 'goda: ' . l:bin . ' exited during the handshake (status ' . l:status . ')'
+            \ . (empty(l:lines) ? ', without a message' : ":\n  " . join(l:lines, "\n  "))
+    endif
     throw 'goda: handshake with ' . l:bin . ' failed: ' . l:msg
           \ . "\n  The binary was probably built with an older goda.vim module. Update it in the Go module"
           \ . " that builds the binary (go get -u github.com/Shougo/goda.vim) and build again."
   endtry
+  if has_key(s:failed, l:bin)
+    call remove(s:failed, l:bin)
+  endif
   let l:theirs = type(l:hello) == v:t_dict ? get(l:hello, 'protocol', 0) : 0
   if l:theirs != s:protocol
     call s:kill(l:inst)
@@ -228,7 +275,8 @@ function! goda#log(...) abort
     return l:inst is v:null ? [] : copy(l:inst.log)
   endif
   let l:all = []
-  for l:inst in values(s:instances)
+  " Binaries whose start failed come first: they are what to look at.
+  for l:inst in values(s:failed) + values(s:instances)
     let l:tag = '[' . fnamemodify(l:inst.bin, ':t') . '] '
     call extend(l:all, map(copy(l:inst.log), 'l:tag . v:val'))
   endfor

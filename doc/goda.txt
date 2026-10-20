@@ -57,6 +57,9 @@ goda#start({bin})
 		|goda-versions|), or contains a plugin name that another
 		running binary already serves.  Calling it again for a binary
 		that is running does nothing.
+		When the binary exits before it answers (a configuration
+		error, a crash), the exception carries what it wrote to
+		stderr.
 
                                                                  *goda#stop()*
 goda#stop([{plugin}])
@@ -87,8 +90,10 @@ goda#is_running([{plugin}])
                                                                   *goda#log()*
 goda#log([{plugin}])
 		Return a |List| of what the binary wrote to stderr.  Kept
-		after the binary exited.  Start here when something does not
-		work.
+		after the binary exited.  Without {plugin}, the lines of
+		every binary, each prefixed with its file name, including a
+		binary whose start failed.  Start here when something does
+		not work.
 
 ==============================================================================
 VARIABLES                                                     *goda-variables*

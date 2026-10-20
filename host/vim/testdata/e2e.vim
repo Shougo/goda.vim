@@ -34,6 +34,10 @@ call s:rec('start_again', {-> goda#start($GODA_BIN)})
 call s:rec('start_other', {-> goda#start($GODA_BIN2)})
 call s:rec('conflict', {-> goda#start($GODA_BIN_COPY)})
 call s:rec('old_protocol', {-> goda#start($GODA_BIN_OLD)})
+" A binary that gives up at once (a configuration error, say): its stderr is
+" in the exception and in goda#log().
+call s:rec('exits', {-> goda#start($GODA_BIN_EXITS)})
+call add(s:out, "exits_log\t" . json_encode(goda#log()))
 call s:rec('plugins', {-> sort(keys(goda#plugins()))})
 call s:rec('reserved', {-> goda#request('goda', 'plugins')})
 call s:rec('other_ping', {-> goda#request('other', 'ping')})
