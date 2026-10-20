@@ -38,7 +38,9 @@ INSTALL                                                         *goda-install*
 
 Requirements:
 - Vim 9.1 or later built with |+job|, |+channel| and |+timers|, or Neovim.
-- Go 1.24 or later, to build plugin binaries.
+- Go 1.26 or later, to build plugin binaries.  An older go command (1.21 or
+  later) downloads Go 1.26 by itself when it builds, unless $GOTOOLCHAIN is
+  "local".
 
 Install goda.vim with your plugin manager.  A plugin binary is built by the
 user or by the plugin that ships it (see |goda_cmp#build()|), and started

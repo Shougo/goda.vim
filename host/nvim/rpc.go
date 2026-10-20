@@ -106,11 +106,9 @@ func (c *rpc) serve(ctx context.Context) error {
 			id, _ := msg[1].(int64)
 			method, _ := msg[2].(string)
 			params, _ := msg[3].([]any)
-			c.inflight.Add(1)
-			go func() {
-				defer c.inflight.Done()
+			c.inflight.Go(func() {
 				c.serveRequest(ctx, id, method, params)
-			}()
+			})
 		case kindResponse:
 			if len(msg) != 4 {
 				c.logf("ignoring malformed response: %v", v)
@@ -133,13 +131,11 @@ func (c *rpc) serve(ctx context.Context) error {
 		case kindNotification:
 			method, _ := msg[1].(string)
 			params, _ := msg[2].([]any)
-			c.inflight.Add(1)
-			go func() {
-				defer c.inflight.Done()
+			c.inflight.Go(func() {
 				if _, err := c.dispatch(ctx, method, params); err != nil {
 					c.logf("notification %s: %v", method, err)
 				}
-			}()
+			})
 		default:
 			c.logf("ignoring message of unknown kind %d", kind)
 		}

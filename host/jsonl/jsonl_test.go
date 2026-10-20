@@ -29,7 +29,7 @@ func run(t *testing.T, lines ...string) []map[string]any {
 		t.Fatal(err)
 	}
 	var res []map[string]any
-	for _, l := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+	for l := range strings.SplitSeq(strings.TrimSpace(out.String()), "\n") {
 		var m map[string]any
 		if err := json.Unmarshal([]byte(l), &m); err != nil {
 			t.Fatalf("answer %q is not JSON: %v", l, err)

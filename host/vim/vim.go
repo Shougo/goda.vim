@@ -147,11 +147,9 @@ func (c *conn) serve(ctx context.Context) error {
 			c.deliver(id, msg[1])
 			continue
 		}
-		c.inflight.Add(1)
-		go func() {
-			defer c.inflight.Done()
+		c.inflight.Go(func() {
 			c.serveRequest(ctx, id, msg[1])
-		}()
+		})
 	}
 }
 

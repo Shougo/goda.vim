@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -89,7 +90,7 @@ func TestRealVim(t *testing.T) {
 		t.Fatalf("vim wrote no results: %v", err)
 	}
 	res := map[string]string{}
-	for _, line := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(string(raw), "\n"), "\n") {
 		name, val, _ := strings.Cut(line, "\t")
 		res[name] = val
 	}
@@ -191,10 +192,5 @@ func TestRealVim(t *testing.T) {
 }
 
 func contains(ss []string, s string) bool {
-	for _, x := range ss {
-		if x == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ss, s)
 }

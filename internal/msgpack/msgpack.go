@@ -370,7 +370,7 @@ func (d *Decoder) array(n int) (any, error) {
 	}
 	defer func() { d.depth-- }()
 	out := make([]any, 0, min(n, 1024))
-	for i := 0; i < n; i++ {
+	for range n {
 		v, err := d.value()
 		if err != nil {
 			return nil, err
@@ -386,7 +386,7 @@ func (d *Decoder) mapN(n int) (any, error) {
 	}
 	defer func() { d.depth-- }()
 	out := make(map[string]any, min(n, 1024))
-	for i := 0; i < n; i++ {
+	for range n {
 		k, err := d.value()
 		if err != nil {
 			return nil, err
