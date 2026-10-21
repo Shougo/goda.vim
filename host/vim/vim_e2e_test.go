@@ -171,6 +171,13 @@ func TestRealVim(t *testing.T) {
 		t.Errorf("probe:\n got %s\nwant %q", res["probe"], wantProbe)
 	}
 
+	// What Notify sent ran before the Eval that followed it.
+	if res["notify_order"] != `"yes"` {
+		t.Errorf("notify_order = %s, want \"yes\"", res["notify_order"])
+	}
+	if !strings.Contains(res["notify_log"], "[notify] goda_no_such_function: ") {
+		t.Errorf("notify_log = %s", res["notify_log"])
+	}
 	if res["stdout"] != `"shout"` {
 		t.Errorf("a stray Println must not break the protocol, got %s", res["stdout"])
 	}

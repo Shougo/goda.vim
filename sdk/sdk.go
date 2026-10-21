@@ -37,12 +37,26 @@ type Meta struct {
 }
 
 // Host is the editor. One implementation exists per transport.
+//
+// The editor runs what a plugin sends in the order it was sent, whichever of
+// these methods sent it.
+//
+// This interface does not grow: a method added to it would break every
+// implementation outside this module (the fakes in tests, for instance). A
+// capability added later is a separate interface that a Host may implement,
+// found with a type assertion, like Closer for plugins.
 type Host interface {
 	Meta() Meta
 	// Call calls a Vim function and returns its decoded result. Arguments
 	// may be any value encoding/json can marshal; the editor sees the JSON
 	// shape (struct fields follow their json tags).
 	Call(ctx context.Context, fn string, args ...any) (any, error)
+	// Notify calls a Vim function without waiting for it: it returns once
+	// the call is sent, and the result is dropped. An error of the
+	// function does not come back either; it is kept for goda#log(). The
+	// error returned is about sending (the editor is gone, an argument
+	// cannot be encoded).
+	Notify(ctx context.Context, fn string, args ...any) error
 	// Eval evaluates a Vim expression.
 	Eval(ctx context.Context, expr string) (any, error)
 	// Cmd executes an Ex command.

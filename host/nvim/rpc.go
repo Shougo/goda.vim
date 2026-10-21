@@ -131,6 +131,11 @@ func (c *rpc) serve(ctx context.Context) error {
 		case kindNotification:
 			method, _ := msg[1].(string)
 			params, _ := msg[2].([]any)
+			if method == "nvim_error_event" {
+				// Neovim's report of a failed notification of ours.
+				c.logf("editor error: %v", params)
+				continue
+			}
 			c.inflight.Go(func() {
 				if _, err := c.dispatch(ctx, method, params); err != nil {
 					c.logf("notification %s: %v", method, err)
@@ -168,6 +173,20 @@ func (c *rpc) dispatch(ctx context.Context, method string, params []any) (res an
 		}
 	}()
 	return fn(ctx, params)
+}
+
+// notify sends a notification to the editor; nothing comes back.
+func (c *rpc) notify(method string, params ...any) error {
+	if params == nil {
+		params = []any{}
+	}
+	c.mu.Lock()
+	closed := c.closed
+	c.mu.Unlock()
+	if closed {
+		return errClosed
+	}
+	return c.send([]any{int64(kindNotification), method, params})
 }
 
 // call sends a request to the editor and waits for the response.

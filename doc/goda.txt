@@ -103,6 +103,12 @@ g:goda#request_timeout
 		Time in milliseconds a blocking |goda#request()| may take in
 		Vim.  Default: 10000
 
+		Neovim has no such limit: its |rpcrequest()| waits as long
+		as the plugin takes, and Neovim does not respond meanwhile.
+		A plugin that may take long should be called with
+		|goda#notify()| and answer by calling back into the editor,
+		or bound its own work with a deadline (`sdk.Guard`).
+
 ==============================================================================
 WRITING A PLUGIN                                                 *goda-plugin*
 
@@ -120,8 +126,17 @@ Parameters and results are generic values: nil, bool, int64, float64, string,
 into a struct, `sdk.Generic` converts a struct into a result.
 
 `sdk.Host` is the editor: `Call(ctx, fn, args...)` calls a Vim function,
-`Eval` evaluates an expression, `Cmd` runs an Ex command, `Meta().Host` is
-"vim" or "nvim".
+`Notify(ctx, fn, args...)` calls one without waiting for it, `Eval` evaluates
+an expression, `Cmd` runs an Ex command, `Meta().Host` is "vim" or "nvim".
+The editor runs what a plugin sends in the order it was sent, so a `Notify`
+followed by a `Call` runs first.  `Notify` returns once the call is sent; an
+error of the function is not returned but kept for |goda#log()| (as lines
+starting with "[notify]").
+
+`sdk.Host` does not get more methods: that would break every implementation
+outside goda.vim, such as the fakes in tests.  A capability added later is a
+separate interface that the Host may implement, found with a type
+assertion, as `sdk.Closer` is for plugins.
 
 Requests run concurrently, each in its own goroutine, and are not ordered.
 Carry a sequence number if order matters.  Use `sdk.Guard` around code you do
@@ -143,6 +158,14 @@ per line on stdin: >
 	echo '{"method":"goda.plugins"}' | ./hello --transport=jsonl
 <
 Calls into the editor fail in this mode.
+
+                                                            *goda-command-line*
+Vim starts a binary as `{bin} --transport=vim`, Neovim as
+`{bin} --transport=nvim` (`--transport=jsonl` is for running it by hand), and
+that is all the editor ever passes: no other options, arguments or
+environment variables.  The rest goes through the
+plugins' methods once the binary runs.  This is fixed, so that a binary built
+long ago still starts with a newer goda.vim.
 
 ==============================================================================
 VERSIONS                                                       *goda-versions*

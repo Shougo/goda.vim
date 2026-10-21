@@ -46,6 +46,18 @@ func (testPlugin) Handlers() map[string]sdk.Handler {
 		// reports what it saw.
 		"probe": probe,
 
+		// Notify: run without an answer, in order with the calls that
+		// follow; an error is kept for goda#log().
+		"notify": func(ctx context.Context, h sdk.Host, _ []any) (any, error) {
+			if err := h.Notify(ctx, "execute", "let g:goda_notified = 'yes'"); err != nil {
+				return nil, err
+			}
+			if err := h.Notify(ctx, "goda_no_such_function"); err != nil {
+				return nil, err
+			}
+			return h.Eval(ctx, "get(g:, 'goda_notified', 'not yet')")
+		},
+
 		// stdout carries the protocol and must stay clean.
 		"shout": func(context.Context, sdk.Host, []any) (any, error) {
 			fmt.Println("this goes to stdout")

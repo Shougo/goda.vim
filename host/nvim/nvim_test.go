@@ -29,6 +29,12 @@ func testTable() map[string]sdk.Handler {
 			}
 			return h.Call(ctx, "f", arg{N: 5, Word: "w"})
 		},
+		"t.notify": func(ctx context.Context, h sdk.Host, p []any) (any, error) {
+			if err := h.Notify(ctx, "setline", 1, "x"); err != nil {
+				return nil, err
+			}
+			return h.Call(ctx, "line", ".")
+		},
 		"t.cmd": func(ctx context.Context, h sdk.Host, p []any) (any, error) {
 			return nil, h.Cmd(ctx, p[0].(string))
 		},
@@ -227,5 +233,28 @@ func TestResponseSurvivesEOF(t *testing.T) {
 	ed.to.Close() // the editor goes away right after asking
 	if e, res := response(t, ed.recv(), 9); e != nil || res != "nvim" {
 		t.Fatalf("got %v, %v", e, res)
+	}
+}
+
+func TestNotify(t *testing.T) {
+	ed := startPlugin(t, testTable())
+	ed.send([]any{0, 1, "t.notify", []any{}})
+	n := ed.recv()
+	if !reflect.DeepEqual(n, []any{int64(2), "nvim_call_function", []any{"goda#_notify", []any{"setline", []any{int64(1), "x"}}}}) {
+		t.Fatalf("notify sent %v", n)
+	}
+	req := ed.recv()
+	if req[0] != int64(0) || req[2] != "nvim_call_function" {
+		t.Fatalf("then got %v", req)
+	}
+	ed.send([]any{1, req[1], nil, int64(1)})
+	if e, res := response(t, ed.recv(), 1); e != nil || res != int64(1) {
+		t.Fatalf("result %v, error %v", res, e)
+	}
+	// Neovim's report of a failed notification is logged, not dispatched.
+	ed.send([]any{2, "nvim_error_event", []any{int64(0), "E117: Unknown function: nope"}})
+	ed.send([]any{0, 2, "t.echo", []any{"still here"}})
+	if _, res := response(t, ed.recv(), 2); !reflect.DeepEqual(res, []any{"still here"}) {
+		t.Fatalf("echo after an error event = %v", res)
 	}
 }

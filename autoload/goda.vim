@@ -19,6 +19,7 @@ let s:protocol = 1
 let s:instances = {}  " binary path -> instance
 let s:routes = {}     " plugin name -> instance
 let s:failed = {}     " binary path -> instance whose start failed (for goda#log())
+let s:notify_errors = []  " errors of functions plugins called with Notify
 " An instance is {'bin', 'job' (Vim), 'chan' and 'job_id' (Neovim), 'log',
 " 'plugins', 'status'}. status is the exit status once the process ended,
 " v:null before.
@@ -274,7 +275,7 @@ function! goda#log(...) abort
     let l:inst = get(s:routes, a:1, v:null)
     return l:inst is v:null ? [] : copy(l:inst.log)
   endif
-  let l:all = []
+  let l:all = map(copy(s:notify_errors), '"[notify] " . v:val')
   " Binaries whose start failed come first: they are what to look at.
   for l:inst in values(s:failed) + values(s:instances)
     let l:tag = '[' . fnamemodify(l:inst.bin, ':t') . '] '
@@ -310,6 +311,19 @@ function! goda#_call(fn, args) abort
     return [0, call(a:fn, a:args)]
   catch
     return [1, v:exception]
+  endtry
+endfunction
+
+" sdk.Host.Notify: nobody waits for the result, so an error is kept for
+" goda#log() instead of being answered.
+function! goda#_notify(fn, args) abort
+  try
+    call call(a:fn, a:args)
+  catch
+    call add(s:notify_errors, a:fn . ': ' . v:exception)
+    if len(s:notify_errors) > 100
+      call remove(s:notify_errors, 0)
+    endif
   endtry
 endfunction
 

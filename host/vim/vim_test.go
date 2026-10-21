@@ -35,6 +35,13 @@ func testTable() map[string]sdk.Handler {
 		"t.eval": func(ctx context.Context, h sdk.Host, p []any) (any, error) {
 			return h.Eval(ctx, p[0].(string))
 		},
+		// Notifies, then calls: the notification must come first.
+		"t.notify": func(ctx context.Context, h sdk.Host, p []any) (any, error) {
+			if err := h.Notify(ctx, "setline", 1, "x"); err != nil {
+				return nil, err
+			}
+			return h.Call(ctx, "line", ".")
+		},
 		"t.fail": func(context.Context, sdk.Host, []any) (any, error) { return nil, fmt.Errorf("deliberate") },
 		"t.boom": func(context.Context, sdk.Host, []any) (any, error) { panic("kaboom") },
 	}
@@ -259,5 +266,22 @@ func TestAnswerSurvivesEOF(t *testing.T) {
 	ed.to.Close()
 	if res, errMsg := envelope(t, ed.recv(), "9"); errMsg != "" || res != "vim" {
 		t.Fatalf("got %v, %q", res, errMsg)
+	}
+}
+
+func TestNotify(t *testing.T) {
+	ed := startPlugin(t, testTable())
+	ed.send(`[1, ["t.notify"]]`)
+	// A call command without a number: Vim answers nothing.
+	if n := ed.recv(); !reflect.DeepEqual(n, []any{"call", "goda#_notify", []any{"setline", []any{json.Number("1"), "x"}}}) {
+		t.Fatalf("notify sent %v", n)
+	}
+	call := ed.recv()
+	if len(call) != 4 || call[1] != "goda#_call" {
+		t.Fatalf("then got %v", call)
+	}
+	ed.send(fmt.Sprintf(`[%s, [0, 1]]`, call[3]))
+	if res, errMsg := envelope(t, ed.recv(), "1"); errMsg != "" || res.(json.Number).String() != "1" {
+		t.Fatalf("result %v, error %q", res, errMsg)
 	}
 }

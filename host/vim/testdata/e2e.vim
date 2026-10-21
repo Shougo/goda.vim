@@ -49,6 +49,8 @@ call s:rec('callback', {-> goda#request('test', 'callback')})
 call s:rec('probe', {-> goda#request('test', 'probe')})
 call s:rec('struct', {-> goda#request('test', 'struct')})
 call s:rec('stdout', {-> goda#request('test', 'shout')})
+call s:rec('notify_order', {-> goda#request('test', 'notify')})
+call add(s:out, "notify_log\t" . json_encode(filter(goda#log(), 'v:val =~# "^\\[notify\\]"')))
 
 call s:rec('unknown_method', {-> goda#request('test', 'nope')})
 call s:rec('unknown_plugin', {-> goda#request('nope', 'echo')})

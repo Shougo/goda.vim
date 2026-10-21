@@ -82,5 +82,6 @@ var errNoHost = errors.New("jsonl transport has no editor host")
 
 func (noHost) Meta() sdk.Meta                                    { return sdk.Meta{Host: sdk.HostNone} }
 func (noHost) Call(context.Context, string, ...any) (any, error) { return nil, errNoHost }
+func (noHost) Notify(context.Context, string, ...any) error      { return errNoHost }
 func (noHost) Eval(context.Context, string) (any, error)         { return nil, errNoHost }
 func (noHost) Cmd(context.Context, string) error                 { return errNoHost }

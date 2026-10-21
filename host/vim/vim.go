@@ -11,6 +11,8 @@
 //	                [N, {"error": "message"}]
 //	plugin -> Vim   ["call", fn, [args], -K]     ask Vim to call a function;
 //	Vim -> plugin   [-K, value]                  Vim answers with the same id
+//	plugin -> Vim   ["call", fn, [args]]         the same without an answer
+//	                                             (Host.Notify)
 //
 // The plugin numbers its own calls -1, -2, ... so they can never collide with
 // the positive ids Vim uses for its requests. Vim keeps executing "call"
@@ -19,9 +21,9 @@
 //
 // Vim reports a failed call (unknown function, bad arguments) as the plain
 // string "ERROR", indistinguishable from a function that returns "ERROR".
-// So host calls go through three helpers in autoload/goda.vim
-// (goda#_call, goda#_eval, goda#_cmd) that catch errors and answer with
-// [0, result] or [1, message].
+// So host calls go through helpers in autoload/goda.vim (goda#_call,
+// goda#_eval, goda#_cmd) that catch errors and answer with [0, result] or
+// [1, message]. goda#_notify, for Notify, keeps the error for goda#log().
 //
 // The method table (plugin.method -> handler) is built by package host.
 package vim
@@ -52,6 +54,15 @@ func (h *Host) Call(ctx context.Context, fn string, args ...any) (any, error) {
 		args = []any{}
 	}
 	return h.c.helper(ctx, "goda#_call", fn, args)
+}
+
+// Notify sends a "call" command without a number, which Vim answers with
+// nothing. It goes through goda#_notify, which keeps an error for goda#log().
+func (h *Host) Notify(_ context.Context, fn string, args ...any) error {
+	if args == nil {
+		args = []any{}
+	}
+	return h.c.notify("goda#_notify", []any{fn, args})
 }
 
 func (h *Host) Eval(ctx context.Context, expr string) (any, error) {
@@ -224,6 +235,17 @@ func (c *conn) helper(ctx context.Context, fn string, args ...any) (any, error) 
 		return nil, fmt.Errorf("vim: %v", arr[1])
 	}
 	return arr[1], nil
+}
+
+// notify sends a "call" command that Vim does not answer.
+func (c *conn) notify(fn string, args []any) error {
+	c.mu.Lock()
+	closed := c.closed
+	c.mu.Unlock()
+	if closed {
+		return errClosed
+	}
+	return c.send([]any{"call", fn, args})
 }
 
 // call sends a "call" command and waits for Vim's answer.

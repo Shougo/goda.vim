@@ -32,6 +32,20 @@ func (h *Host) Call(ctx context.Context, fn string, args ...any) (any, error) {
 	return h.c.call(ctx, "nvim_call_function", fn, norm)
 }
 
+// Notify sends nvim_call_function as a msgpack-rpc notification. It goes
+// through goda#_notify, as on Vim, so that an error is kept for goda#log()
+// the same way in both editors.
+func (h *Host) Notify(_ context.Context, fn string, args ...any) error {
+	if args == nil {
+		args = []any{}
+	}
+	norm, err := sdk.Generic(args)
+	if err != nil {
+		return err
+	}
+	return h.c.notify("nvim_call_function", "goda#_notify", []any{fn, norm})
+}
+
 func (h *Host) Eval(ctx context.Context, expr string) (any, error) {
 	return h.c.call(ctx, "nvim_eval", expr)
 }
