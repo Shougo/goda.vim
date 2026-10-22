@@ -1,4 +1,4 @@
-" Driven by vim_e2e_test.go: runs in a real Vim and writes "name<TAB>result"
+" Driven by e2e_test.go: runs in a real Vim or Neovim and writes "name<TAB>result"
 " lines to $GODA_OUT for the Go test to check.
 " 'encoding' defaults to latin1 under -u NONE in a non-UTF-8 locale, which would
 " garble the Japanese test string. Real setups use UTF-8.
@@ -34,6 +34,8 @@ call s:rec('start_again', {-> goda#start($GODA_BIN)})
 call s:rec('start_other', {-> goda#start($GODA_BIN2)})
 call s:rec('conflict', {-> goda#start($GODA_BIN_COPY)})
 call s:rec('old_protocol', {-> goda#start($GODA_BIN_OLD)})
+" A binary that never answers (not a goda.vim binary) must not hang the editor.
+call s:rec('silent', {-> goda#start($GODA_BIN_SILENT)})
 " A binary that gives up at once (a configuration error, say): its stderr is
 " in the exception and in goda#log().
 call s:rec('exits', {-> goda#start($GODA_BIN_EXITS)})

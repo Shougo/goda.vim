@@ -1,4 +1,4 @@
-// Command plugin2 is a second, independent plugin binary for vim_e2e_test.go:
+// Command plugin2 is a second, independent plugin binary for host/e2e/e2e_test.go:
 // one plugin ("other") with one method.
 package main
 

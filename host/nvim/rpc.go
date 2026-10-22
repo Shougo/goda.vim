@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Shougo/goda.vim/sdk"
 	"io"
 	"sync"
 
@@ -153,6 +154,13 @@ func (c *rpc) serveRequest(ctx context.Context, id int64, method string, params 
 		err = c.send([]any{int64(kindResponse), id, nil, res})
 		if err == nil {
 			return
+		}
+		// msgpack knows only the generic kinds; a struct or a typed slice
+		// goes through its JSON shape, as it does on Vim.
+		if g, gerr := sdk.Generic(res); gerr == nil {
+			if err = c.send([]any{int64(kindResponse), id, nil, g}); err == nil {
+				return
+			}
 		}
 		// The result could not be encoded; tell the editor instead of hanging it.
 	}

@@ -59,7 +59,10 @@ goda#start({bin})
 		that is running does nothing.
 		When the binary exits before it answers (a configuration
 		error, a crash), the exception carries what it wrote to
-		stderr.
+		stderr.  A binary that does not answer within
+		|g:goda#request_timeout| is given up, in Neovim too: there
+		the handshake is first tried on a plain job that can time
+		out (|rpcrequest()| cannot), so the binary is started twice.
 
                                                                  *goda#stop()*
 goda#stop([{plugin}])
@@ -103,8 +106,10 @@ g:goda#request_timeout
 		Time in milliseconds a blocking |goda#request()| may take in
 		Vim.  Default: 10000
 
-		Neovim has no such limit: its |rpcrequest()| waits as long
-		as the plugin takes, and Neovim does not respond meanwhile.
+		Neovim applies it to the handshake of |goda#start()| only.
+		Other requests have no such limit there: |rpcrequest()|
+		waits as long as the plugin takes, and Neovim does not
+		respond meanwhile.
 		A plugin that may take long should be called with
 		|goda#notify()| and answer by calling back into the editor,
 		or bound its own work with a deadline (`sdk.Guard`).

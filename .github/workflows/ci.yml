@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest Go the module supports, and the newest.
+        go: ['1.26', 'stable']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false  # no dependencies, no go.sum
+      # host/e2e runs the scenario in every editor it finds.
+      - name: Install Vim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          version: stable
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+      - run: vim --version | head -n 3 && nvim --version | head -n 1
+      - run: gofmt -l . | tee /dev/stderr | (! read)
+      - run: go vet ./...
+      - run: go test -race ./...

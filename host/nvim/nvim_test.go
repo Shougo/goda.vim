@@ -29,6 +29,13 @@ func testTable() map[string]sdk.Handler {
 			}
 			return h.Call(ctx, "f", arg{N: 5, Word: "w"})
 		},
+		"t.typed": func(context.Context, sdk.Host, []any) (any, error) {
+			type pair struct {
+				Event string   `json:"event"`
+				Fts   []string `json:"filetypes"`
+			}
+			return []map[string]any{{"p": pair{"BufEnter", []string{"go"}}}}, nil
+		},
 		"t.notify": func(ctx context.Context, h sdk.Host, p []any) (any, error) {
 			if err := h.Notify(ctx, "setline", 1, "x"); err != nil {
 				return nil, err
@@ -47,8 +54,8 @@ func testTable() map[string]sdk.Handler {
 }
 
 // fakeEditor plays Neovim's side of the wire. It is written against the
-// msgpack-rpc spec, not against a real Neovim, so it proves the protocol logic
-// (framing, ids, nested requests) but not Neovim compatibility.
+// msgpack-rpc spec, so it proves the protocol logic (framing, ids, nested
+// requests); host/e2e/e2e_test.go checks it against a real Neovim.
 type fakeEditor struct {
 	t   *testing.T
 	to  io.WriteCloser // editor -> plugin
@@ -256,5 +263,17 @@ func TestNotify(t *testing.T) {
 	ed.send([]any{0, 2, "t.echo", []any{"still here"}})
 	if _, res := response(t, ed.recv(), 2); !reflect.DeepEqual(res, []any{"still here"}) {
 		t.Fatalf("echo after an error event = %v", res)
+	}
+}
+
+// A result made of typed values (structs, typed slices and maps) reaches
+// Neovim in its JSON shape, as it does on Vim.
+func TestTypedResult(t *testing.T) {
+	ed := startPlugin(t, testTable())
+	ed.send([]any{0, 1, "t.typed", []any{}})
+	e, res := response(t, ed.recv(), 1)
+	want := []any{map[string]any{"p": map[string]any{"event": "BufEnter", "filetypes": []any{"go"}}}}
+	if e != nil || !reflect.DeepEqual(res, want) {
+		t.Fatalf("result %#v, error %v", res, e)
 	}
 }

@@ -127,12 +127,12 @@ the whole program. Building needs Go; running does not. Pure Go, no cgo.
 ## Tests
 
 ```sh
-go test ./...        # includes a real Vim if one is installed (+job +channel)
-go test -short ./... # without starting Vim
+go test ./...        # includes real editors: Vim (+job +channel) and Neovim, if installed
+go test -short ./... # without starting an editor
 ```
 
-The Vim transport is tested against a real Vim; the Neovim transport only
-against a fake editor written from the msgpack-rpc specification.
+`host/e2e` runs one scenario through `autoload/goda.vim` in every editor it
+finds; CI (`.github/workflows/ci.yml`) installs both.
 
 ## AI-assisted, not AI-dependent
 
@@ -141,10 +141,9 @@ this project are not built on the assumption that AI exists.
 
 ## Status
 
-Checked: `go vet`, `go test` (and `-race`), the Vim transport and the Vim
-script against Vim 9.1 on Linux, several binaries at once, the handshake.
-Not checked by the automated tests: Neovim against a real Neovim (a fake editor
-only), Vim 9.2, Windows.
+Checked: `go vet`, `go test` (and `-race`), both transports and the Vim
+script against Vim 9.1 and Neovim 0.12 on Linux, several binaries at once,
+the handshake. Not checked by the automated tests: Windows, macOS.
 
 ## License
 

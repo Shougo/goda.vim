@@ -101,6 +101,105 @@ function! s:wait_exit(inst, timeout) abort
   return a:inst.status
 endfunction
 
+" Neovim's rpcrequest() cannot time out, and neither timers nor anything
+" else runs while it waits: a binary that never answers the handshake (not a
+" goda.vim binary at all, say) would hang Neovim for good. So in Neovim the
+" handshake is first tried on a separate, plain job, where waiting can be
+" bounded: the request is written with msgpackdump() and the answer read with
+" msgpackparse(). Only a binary that answered is started again for real.
+" Returns the answer [1, 1, error, result], or throws.
+function! s:nvim_probe(inst) abort
+  let st = {'data': [], 'log': [], 'status': v:null}
+  let job = jobstart([a:inst.bin, '--transport=nvim'], {
+        \ 'on_stdout': function('s:probe_on_stdout', [st]),
+        \ 'on_stderr': function('s:probe_on_stderr', [st]),
+        \ 'on_exit': function('s:probe_on_exit', [st]),
+        \ })
+  if job <= 0
+    throw 'goda: failed to start ' . a:inst.bin
+  endif
+  call chansend(job, msgpackdump([[0, 1, 'goda.hello', []]], 'B'))
+  let timeout = get(g:, 'goda#request_timeout', 10000)
+  let start = reltime()
+  let answer = v:null
+  while 1
+    call wait(10, function('s:probe_ready', [st]))
+    let answer = s:probe_answer(st)
+    if answer isnot v:null || st.status isnot v:null
+          \ || reltimefloat(reltime(start)) * 1000 >= timeout
+      break
+    endif
+  endwhile
+  if answer isnot v:null
+    call jobstop(job)
+    return answer
+  endif
+  if st.status is v:null
+    call jobstop(job)
+    let a:inst.log = st.log
+    let s:failed[a:inst.bin] = a:inst
+    throw 'goda: ' . a:inst.bin . ' did not answer the handshake within ' . timeout . ' ms'
+          \ . ' (g:goda#request_timeout). Is it a goda.vim plugin binary? If so, it was probably'
+          \ . ' built with an older goda.vim module: update it in the Go module that builds the'
+          \ . ' binary (go get -u github.com/Shougo/goda.vim) and build again.'
+  endif
+  " It ended by itself: let its last stderr lines in, then say why.
+  call jobwait([job], 200)
+  let a:inst.log = st.log
+  let a:inst.status = st.status
+  call s:throw_exited(a:inst, st.status)
+endfunction
+
+function! s:probe_on_stdout(st, job, data, event) abort
+  " a:data is split at NL as readfile() would, which msgpackparse() takes; a
+  " chunk continues the last line of the previous one.
+  if empty(a:st.data)
+    let a:st.data = copy(a:data)
+  else
+    let a:st.data[-1] .= a:data[0]
+    call extend(a:st.data, a:data[1:])
+  endif
+endfunction
+
+function! s:probe_on_stderr(st, job, data, event) abort
+  call extend(a:st.log, filter(copy(a:data), 'v:val !=# ""'))
+endfunction
+
+function! s:probe_on_exit(st, job, code, event) abort
+  let a:st.status = a:code
+endfunction
+
+function! s:probe_ready(st) abort
+  return a:st.status isnot v:null || a:st.data !=# [] && a:st.data !=# ['']
+endfunction
+
+" The answer to request 1 among what arrived, v:null while it is incomplete.
+function! s:probe_answer(st) abort
+  if a:st.data ==# [] || a:st.data ==# ['']
+    return v:null
+  endif
+  try
+    let msgs = msgpackparse(a:st.data)
+  catch
+    return v:null
+  endtry
+  for m in msgs
+    if type(m) == v:t_list && len(m) == 4 && m[0] == 1 && m[1] == 1
+      return m
+    endif
+  endfor
+  return v:null
+endfunction
+
+" The binary ended during the handshake (a configuration error, a crash):
+" what it wrote to stderr says why.
+function! s:throw_exited(inst, status) abort
+  let s:failed[a:inst.bin] = a:inst
+  let lines = filter(copy(a:inst.log), 'v:val !~# "^goda: .* exited with "')
+  throw 'goda: ' . a:inst.bin . ' exited during the handshake (status ' . a:status . ')'
+        \ . (empty(lines) ? ', without a message' : ":\n  " . join(lines, "\n  "))
+endfunction
+
 " Blocking call of a method of one binary, by its full name ('plugin.method').
 function! s:rpc(inst, name, args) abort
   if has('nvim')
@@ -149,6 +248,7 @@ function! goda#start(bin) abort
 
   let inst = {'bin': bin, 'job': v:null, 'chan': 0, 'job_id': 0, 'log': [], 'plugins': [], 'status': v:null}
   if has('nvim')
+    call s:nvim_probe(inst)
     let chan = jobstart([bin, '--transport=nvim'], {
           \ 'rpc': v:true,
           \ 'on_stderr': function('s:nvim_on_stderr', [inst]),
@@ -185,11 +285,7 @@ function! goda#start(bin) abort
     call s:kill(inst)
     let s:failed[bin] = inst
     if status isnot v:null
-      " It ended by itself (a configuration error, a crash): what it wrote
-      " to stderr says why.
-      let lines = filter(copy(inst.log), 'v:val !~# "^goda: .* exited with "')
-      throw 'goda: ' . bin . ' exited during the handshake (status ' . status . ')'
-            \ . (empty(lines) ? ', without a message' : ":\n  " . join(lines, "\n  "))
+      call s:throw_exited(inst, status)
     endif
     throw 'goda: handshake with ' . bin . ' failed: ' . msg
           \ . "\n  The binary was probably built with an older goda.vim module. Update it in the Go module"

@@ -48,9 +48,9 @@ func testTable() map[string]sdk.Handler {
 }
 
 // fakeEditor plays Vim's side of the wire, written from the format verified
-// against a real Vim (see the package comment and vim_e2e_test.go). It proves
+// against a real Vim (see the package comment and host/e2e/e2e_test.go). It proves
 // the protocol logic (framing, ids, nested calls), not Vim compatibility;
-// vim_e2e_test.go covers that.
+// host/e2e/e2e_test.go covers that.
 type fakeEditor struct {
 	t   *testing.T
 	to  io.WriteCloser // editor -> plugin

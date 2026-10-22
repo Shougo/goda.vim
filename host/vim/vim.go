@@ -3,7 +3,7 @@
 // ch_evalexpr(); the plugin calls back with the channel "call" command.
 //
 // Wire format, one JSON array per line. This was checked against a real Vim
-// (see vim_e2e_test.go), not just the documentation:
+// (see host/e2e/e2e_test.go), not just the documentation:
 //
 //	Vim -> plugin   [N, [method, params...]]     N > 0: a request, answer it
 //	                                             N = 0: a notification, no answer

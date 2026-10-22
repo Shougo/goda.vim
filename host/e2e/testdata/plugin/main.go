@@ -1,4 +1,4 @@
-// Command plugin is the plugin binary used by vim_e2e_test.go: one plugin
+// Command plugin is the plugin binary used by host/e2e/e2e_test.go: one plugin
 // ("test") whose methods probe the transport and the host API from inside a
 // real Vim.
 package main
