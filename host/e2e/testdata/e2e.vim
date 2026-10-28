@@ -7,13 +7,17 @@ scriptencoding utf-8
 set nocompatible
 set runtimepath^=$GODA_RTP
 
-let s:out = []
+" Each result is written at once: what was reached is known if the editor
+" stops early.
+function! s:add(line) abort
+  call writefile([a:line], $GODA_OUT, 'a')
+endfunction
 
 function! s:rec(name, Fn) abort
   try
-    call add(s:out, a:name . "\t" . json_encode(call(a:Fn, [])))
+    call s:add(a:name . "\t" . json_encode(call(a:Fn, [])))
   catch
-    call add(s:out, a:name . "\tEXC " . v:exception)
+    call s:add(a:name . "\tEXC " . v:exception)
   endtry
 endfunction
 
@@ -21,11 +25,11 @@ endfunction
 let g:goda#request_timeout = 500
 
 try
-  call add(s:out, "start\t" . json_encode(goda#start($GODA_BIN)))
+  call s:add("start\t" . json_encode(goda#start($GODA_BIN)))
 catch
-  call add(s:out, "start\tEXC " . v:exception)
+  call s:add("start\tEXC " . v:exception)
 endtry
-call add(s:out, "running\t" . goda#is_running('test'))
+call s:add("running\t" . goda#is_running('test'))
 
 " Starting the same binary again is a no-op; a second, independent binary
 " runs next to the first; a copy of the first (same plugin name) is refused;
@@ -39,7 +43,7 @@ call s:rec('silent', {-> goda#start($GODA_BIN_SILENT)})
 " A binary that gives up at once (a configuration error, say): its stderr is
 " in the exception and in goda#log().
 call s:rec('exits', {-> goda#start($GODA_BIN_EXITS)})
-call add(s:out, "exits_log\t" . json_encode(goda#log()))
+call s:add("exits_log\t" . json_encode(goda#log()))
 call s:rec('plugins', {-> sort(keys(goda#plugins()))})
 call s:rec('reserved', {-> goda#request('goda', 'plugins')})
 call s:rec('other_ping', {-> goda#request('other', 'ping')})
@@ -52,7 +56,7 @@ call s:rec('probe', {-> goda#request('test', 'probe')})
 call s:rec('struct', {-> goda#request('test', 'struct')})
 call s:rec('stdout', {-> goda#request('test', 'shout')})
 call s:rec('notify_order', {-> goda#request('test', 'notify')})
-call add(s:out, "notify_log\t" . json_encode(filter(goda#log(), 'v:val =~# "^\\[notify\\]"')))
+call s:add("notify_log\t" . json_encode(filter(goda#log(), 'v:val =~# "^\\[notify\\]"')))
 
 call s:rec('unknown_method', {-> goda#request('test', 'nope')})
 call s:rec('unknown_plugin', {-> goda#request('nope', 'echo')})
@@ -68,18 +72,17 @@ call s:rec('after_notify', {-> goda#request('test', 'echo', 'after notify')})
 " callbacks run before reading the log.
 sleep 2200m
 call s:rec('after_late_answer', {-> goda#request('test', 'echo', 'after the late answer')})
-call add(s:out, "log\t" . json_encode(goda#log()))
+call s:add("log\t" . json_encode(goda#log()))
 
 " Stopping one plugin's binary leaves the other alone.
 call goda#stop('other')
 sleep 100m
-call add(s:out, "other_running\t" . goda#is_running('other'))
+call s:add("other_running\t" . goda#is_running('other'))
 call s:rec('other_after_stop', {-> goda#request('other', 'ping')})
 call s:rec('test_after_other_stop', {-> goda#request('test', 'echo', 'alive')})
 
 call goda#stop()
 sleep 100m
-call add(s:out, "stopped\t" . goda#is_running())
+call s:add("stopped\t" . goda#is_running())
 
-call writefile(s:out, $GODA_OUT)
 qa!

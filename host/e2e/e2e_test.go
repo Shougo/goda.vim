@@ -23,8 +23,9 @@ import (
 type editor struct {
 	name string // "vim" or "nvim", as Meta().Host reports it
 	bin  string
-	// args runs a script and exits, without a UI.
-	args func(script string) []string
+	// args runs a script and exits, without a UI, with the messages
+	// written to log.
+	args func(script, log string) []string
 }
 
 func editors(t *testing.T) []editor {
@@ -33,16 +34,16 @@ func editors(t *testing.T) []editor {
 		ver, _ := exec.Command(bin, "--version").Output()
 		if bytes.Contains(ver, []byte("+job")) && bytes.Contains(ver, []byte("+channel")) {
 			t.Logf("using %s", bytes.SplitN(ver, []byte("\n"), 2)[0])
-			eds = append(eds, editor{"vim", bin, func(s string) []string {
-				return []string{"-u", "NONE", "-i", "NONE", "-N", "-es", "-S", s}
+			eds = append(eds, editor{"vim", bin, func(s, log string) []string {
+				return []string{"-u", "NONE", "-i", "NONE", "-N", "-es", "-V1" + log, "-S", s}
 			}})
 		}
 	}
 	if bin, err := exec.LookPath("nvim"); err == nil {
 		ver, _ := exec.Command(bin, "--version").Output()
 		t.Logf("using %s", bytes.SplitN(ver, []byte("\n"), 2)[0])
-		eds = append(eds, editor{"nvim", bin, func(s string) []string {
-			return []string{"--headless", "-u", "NONE", "-i", "NONE", "-n", "-S", s}
+		eds = append(eds, editor{"nvim", bin, func(s, log string) []string {
+			return []string{"--headless", "-u", "NONE", "-i", "NONE", "-n", "-V1" + log, "-S", s}
 		}})
 	}
 	return eds
@@ -120,13 +121,16 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 	closeFile := filepath.Join(dir, "closed.txt")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, ed.bin, ed.args(script)...)
+	log := filepath.Join(dir, "messages.txt")
+	cmd := exec.CommandContext(ctx, ed.bin, ed.args(script, log)...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GODA_CLOSE_FILE="+closeFile, "GODA_BIN="+f.bin, "GODA_RTP="+root, "GODA_OUT="+out,
 		"GODA_BIN2="+f.bin2, "GODA_BIN_COPY="+f.binCopy, "GODA_BIN_OLD="+f.binOld,
 		"GODA_BIN_SILENT="+f.binSilent, "GODA_BIN_EXITS="+f.binExits)
 	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("%s: %v\n%s", ed.name, err, b)
+		msgs, _ := os.ReadFile(log)
+		res, _ := os.ReadFile(out)
+		t.Fatalf("%s: %v\n%s\nmessages:\n%s\nresults so far:\n%s", ed.name, err, b, msgs, res)
 	}
 
 	raw, err := os.ReadFile(out)
@@ -239,7 +243,7 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		!strings.Contains(v, `unknown filter "zz"`) || strings.Contains(v, "older goda.vim") {
 		t.Errorf("exits = %q", v)
 	}
-	if v := res["exits_log"]; !strings.Contains(v, "[plugin-exits] configuration: unknown filter") {
+	if v := res["exits_log"]; !strings.Contains(v, "["+filepath.Base(f.binExits)+"] configuration: unknown filter") {
 		t.Errorf("goda#log() after a failed start = %s", v)
 	}
 	// Vim gives up after g:goda#request_timeout; Neovim cannot and waits.
