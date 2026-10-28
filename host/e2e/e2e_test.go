@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -54,15 +55,26 @@ type fixtures struct {
 
 func build(t *testing.T, root, dir string) fixtures {
 	t.Helper()
-	f := fixtures{
-		bin:       filepath.Join(dir, "plugin"),
-		bin2:      filepath.Join(dir, "plugin2"),
-		binCopy:   filepath.Join(dir, "plugin-copy"), // same plugin name as bin, other path
-		binOld:    filepath.Join(dir, "plugin-old"),  // answers with protocol 99
-		binSilent: filepath.Join(dir, "plugin-silent"),
-		binExits:  filepath.Join(dir, "plugin-exits"),
+	// (A binary needs its extension on MS-Windows.)
+	exe := ""
+	if runtime.GOOS == "windows" {
+		exe = ".exe"
 	}
-	for out, pkg := range map[string]string{f.bin: "plugin", f.bin2: "plugin2", f.binOld: "oldproto"} {
+	f := fixtures{
+		bin:       filepath.Join(dir, "plugin"+exe),
+		bin2:      filepath.Join(dir, "plugin2"+exe),
+		binCopy:   filepath.Join(dir, "plugin-copy"+exe), // same plugin name as bin, other path
+		binOld:    filepath.Join(dir, "plugin-old"+exe),  // answers with protocol 99
+		binSilent: filepath.Join(dir, "plugin-silent"+exe),
+		binExits:  filepath.Join(dir, "plugin-exits"+exe),
+	}
+	for out, pkg := range map[string]string{
+		f.bin: "plugin", f.bin2: "plugin2", f.binOld: "oldproto",
+		// Never answers: not a goda.vim binary at all.
+		f.binSilent: "silent",
+		// Exits before the handshake with a reason on stderr.
+		f.binExits: "exits",
+	} {
 		cmd := exec.Command("go", "build", "-o", out, "./host/e2e/testdata/"+pkg)
 		cmd.Dir = root
 		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
@@ -74,19 +86,8 @@ func build(t *testing.T, root, dir string) fixtures {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scripts := map[string]string{
-		// Never answers: not a goda.vim binary at all.
-		f.binSilent: "#!/bin/sh\nsleep 30\n",
-		// Exits before the handshake with a reason on stderr.
-		f.binExits: "#!/bin/sh\necho 'configuration: unknown filter \"zz\"' >&2\nexit 3\n",
-	}
 	if err := os.WriteFile(f.binCopy, data, 0o755); err != nil {
 		t.Fatal(err)
-	}
-	for path, body := range scripts {
-		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-			t.Fatal(err)
-		}
 	}
 	return f
 }
@@ -168,7 +169,7 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		}
 	}
 
-	// goda#stop() ends the job with SIGTERM, and the host must have called
+	// goda#stop() closes the input of the job, and the host must have called
 	// the plugin's Close (sdk.Closer) before exiting.
 	var closed []byte
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {

@@ -35,3 +35,37 @@ jobs:
       - run: gofmt -l . | tee /dev/stderr | (! read)
       - run: go vet ./...
       - run: go test -race ./...
+
+  # Windows and macOS: the same tests, end-to-end ones included (job
+  # control, pipes and stopping a job differ there), without the race
+  # detector (it needs cgo).
+  other:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Keep the line endings of the repository.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - name: Install Vim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          version: stable
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false  # no dependencies, no go.sum
+      - run: go version && vim --version | head -n 3 && nvim --version | head -n 1
+      - run: go vet ./...
+      - run: go test ./...

@@ -75,8 +75,9 @@ func Serve(transport string, plugins ...sdk.Plugin) error {
 		return fmt.Errorf("unknown transport %q (want %s)", transport, strings.Join(Transports, ", "))
 	}
 
-	// The editor stops a job with SIGTERM (job_stop(), jobstop(), and when
-	// it exits), so that is the usual way to learn about the end.
+	// goda#stop() closes the input (serve returns), and the editor may stop
+	// the job with SIGTERM (job_stop(), jobstop(), and when it exits); on
+	// MS-Windows it kills it instead, so the input is closed first.
 	sig, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errc := make(chan error, 1)

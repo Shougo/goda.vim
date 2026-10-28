@@ -67,8 +67,10 @@ goda#start({bin})
                                                                  *goda#stop()*
 goda#stop([{plugin}])
 		Stop the binary serving {plugin}, or all binaries when it is
-		omitted.  The binary is told to stop with SIGTERM and its
-		plugins' `Close` is called (see |goda-plugin|).
+		omitted.  Its input is closed, on which it calls its plugins'
+		`Close` (see |goda-plugin|) and exits; a binary still running
+		after |g:goda#stop_timeout| is killed.  The binaries are
+		stopped this way when the editor exits, too (|VimLeavePre|).
 
                                                               *goda#request()*
 goda#request({plugin}, {method} [, {arg}...])
@@ -113,6 +115,12 @@ g:goda#request_timeout
 		A plugin that may take long should be called with
 		|goda#notify()| and answer by calling back into the editor,
 		or bound its own work with a deadline (`sdk.Guard`).
+
+                                                         *g:goda#stop_timeout*
+g:goda#stop_timeout
+		Time in milliseconds |goda#stop()| waits for a binary to
+		stop by itself (its plugins' `Close` included) before it
+		kills it.  Default: 3000
 
 ==============================================================================
 WRITING A PLUGIN                                                 *goda-plugin*

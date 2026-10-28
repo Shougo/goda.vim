@@ -24,6 +24,14 @@ let s:notify_errors = []  " errors of functions plugins called with Notify
 " 'plugins', 'status'}. status is the exit status once the process ended,
 " v:null before.
 
+" When the editor exits, the binaries are stopped as goda#stop() does, so
+" that their plugins' Close runs on MS-Windows too (the editor itself would
+" kill them).
+augroup goda
+  autocmd!
+  autocmd VimLeavePre * call goda#stop()
+augroup END
+
 function! s:log_add(inst, lines) abort
   call extend(a:inst.log, filter(copy(a:lines), 'v:val !=# ""'))
   if len(a:inst.log) > 200
@@ -60,7 +68,23 @@ function! s:alive(inst) abort
   return a:inst.job isnot v:null && job_status(a:inst.job) ==# 'run'
 endfunction
 
-function! s:kill(inst) abort
+" Stops the binary of INST.  With TIMEOUT (ms), it is first told to stop by
+" closing its input: it calls its plugins' Close and exits, and is killed
+" only if it is still running after TIMEOUT.  (On MS-Windows the editor
+" stops a job by killing it, which leaves no time for Close.)
+function! s:kill(inst, timeout = 0) abort
+  if a:timeout > 0 && s:alive(a:inst)
+    try
+      if has('nvim')
+        call chanclose(a:inst.chan, 'rpc')
+      else
+        call ch_close_in(a:inst.job)
+      endif
+      call s:wait_exit(a:inst, a:timeout)
+    catch
+      " Closed already: stopped below.
+    endtry
+  endif
   if has('nvim')
     if a:inst.chan > 0
       call jobstop(a:inst.chan)
@@ -321,9 +345,10 @@ endfunction
 
 " Stop the binary that serves PLUGIN, or all binaries without an argument.
 function! goda#stop(...) abort
+  let timeout = get(g:, 'goda#stop_timeout', 3000)
   if a:0 == 0
     for inst in values(s:instances)
-      call s:kill(inst)
+      call s:kill(inst, timeout)
     endfor
     let s:instances = {}
     let s:routes = {}
@@ -333,7 +358,7 @@ function! goda#stop(...) abort
   if inst is v:null
     return
   endif
-  call s:kill(inst)
+  call s:kill(inst, timeout)
   for name in inst.plugins
     if get(s:routes, name, v:null) is inst
       call remove(s:routes, name)
