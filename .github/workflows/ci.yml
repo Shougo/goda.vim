@@ -54,10 +54,12 @@ jobs:
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
       - name: Install Vim
+        id: vim
         uses: rhysd/action-setup-vim@v1
         with:
           version: stable
       - name: Install Neovim
+        id: nvim
         uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
@@ -66,6 +68,14 @@ jobs:
         with:
           go-version: stable
           cache: false  # no dependencies, no go.sum
-      - run: go version && vim --version | head -n 3 && nvim --version | head -n 1
+      # The editors that were installed: on MS-Windows, Git Bash's PATH has
+      # MSYS2's Vim first.
+      - run: go version && "$GODA_VIM" --version | head -n 3 && "$GODA_NVIM" --version | head -n 1
+        env:
+          GODA_VIM: ${{ steps.vim.outputs.executable }}
+          GODA_NVIM: ${{ steps.nvim.outputs.executable }}
       - run: go vet ./...
       - run: go test ./...
+        env:
+          GODA_VIM: ${{ steps.vim.outputs.executable }}
+          GODA_NVIM: ${{ steps.nvim.outputs.executable }}

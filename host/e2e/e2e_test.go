@@ -28,20 +28,30 @@ type editor struct {
 	args func(script, log string) []string
 }
 
+// find is the editor $env names, or name in PATH.
+func find(env, name string) (string, error) {
+	if bin := os.Getenv(env); bin != "" {
+		return bin, nil
+	}
+	return exec.LookPath(name)
+}
+
 func editors(t *testing.T) []editor {
 	var eds []editor
-	if bin, err := exec.LookPath("vim"); err == nil {
+	// GODA_VIM picks a Vim (on MS-Windows, the one in Git Bash's PATH is
+	// MSYS2's, which reads its arguments as Unix paths).
+	if bin, err := find("GODA_VIM", "vim"); err == nil {
 		ver, _ := exec.Command(bin, "--version").Output()
 		if bytes.Contains(ver, []byte("+job")) && bytes.Contains(ver, []byte("+channel")) {
-			t.Logf("using %s", bytes.SplitN(ver, []byte("\n"), 2)[0])
+			t.Logf("using %s (%s)", bytes.SplitN(ver, []byte("\n"), 2)[0], bin)
 			eds = append(eds, editor{"vim", bin, func(s, log string) []string {
 				return []string{"-u", "NONE", "-i", "NONE", "-N", "-es", "-V1" + log, "-S", s}
 			}})
 		}
 	}
-	if bin, err := exec.LookPath("nvim"); err == nil {
+	if bin, err := find("GODA_NVIM", "nvim"); err == nil {
 		ver, _ := exec.Command(bin, "--version").Output()
-		t.Logf("using %s", bytes.SplitN(ver, []byte("\n"), 2)[0])
+		t.Logf("using %s (%s)", bytes.SplitN(ver, []byte("\n"), 2)[0], bin)
 		eds = append(eds, editor{"nvim", bin, func(s, log string) []string {
 			return []string{"--headless", "-u", "NONE", "-i", "NONE", "-n", "-V1" + log, "-S", s}
 		}})
