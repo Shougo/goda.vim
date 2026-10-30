@@ -14,20 +14,20 @@ jobs:
         # The oldest Go the module supports, and the newest.
         go: ['1.26', 'stable']
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       # host/e2e runs the scenario in every editor it finds.
       - name: Install Vim
-        uses: rhysd/action-setup-vim@v1
+        uses: rhysd/action-setup-vim@v1.6.1
         with:
           version: stable
       - name: Install Neovim
-        uses: rhysd/action-setup-vim@v1
+        uses: rhysd/action-setup-vim@v1.6.1
         with:
           neovim: true
           version: stable
       # After the editors: installing them may put a directory with the
       # runner's own, older Go first in PATH.
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version: ${{ matrix.go }}
           cache: false  # no dependencies, no go.sum
@@ -52,19 +52,19 @@ jobs:
     steps:
       # Keep the line endings of the repository.
       - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Install Vim
         id: vim
-        uses: rhysd/action-setup-vim@v1
+        uses: rhysd/action-setup-vim@v1.6.1
         with:
           version: stable
       - name: Install Neovim
         id: nvim
-        uses: rhysd/action-setup-vim@v1
+        uses: rhysd/action-setup-vim@v1.6.1
         with:
           neovim: true
           version: stable
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version: stable
           cache: false  # no dependencies, no go.sum
