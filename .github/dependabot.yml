@@ -1,0 +1,11 @@
+# Dependabot: updates of the GitHub Actions (the module has no dependencies),
+# once a week, of releases at least 7 days old (time for a broken or malicious
+# release to be found).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

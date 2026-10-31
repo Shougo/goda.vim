@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: go ${{ matrix.go }}
@@ -15,6 +18,8 @@ jobs:
         go: ['1.26', 'stable']
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       # host/e2e runs the scenario in every editor it finds.
       - name: Install Vim
         uses: rhysd/action-setup-vim@v1.6.1
@@ -53,6 +58,8 @@ jobs:
       # Keep the line endings of the repository.
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Install Vim
         id: vim
         uses: rhysd/action-setup-vim@v1.6.1
