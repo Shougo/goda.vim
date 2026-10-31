@@ -296,8 +296,9 @@ endfunction
 " Public API
 
 " How to start PLUGIN when it is asked for and not running: STARTER is the
-" binary (for goda#start()), or a Funcref that starts it. A plugin calls it
-" from its plugin/ file, and its requests start the binary when they need it.
+" binary (for goda#start()), or a Funcref that starts it. A plugin calls it at
+" the top of its autoload script, and its requests start the binary when they
+" need it.
 function! goda#register(plugin, starter) abort
   if a:plugin ==# 'goda'
     throw 'goda: the plugin name "goda" is reserved'

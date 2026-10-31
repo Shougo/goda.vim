@@ -89,10 +89,12 @@ A plugin need not start its binary itself: `goda#register()` says how, and
 the first request starts it (and starts it again after it stopped):
 
 ```vim
-" plugin/hello.vim: costs nothing at startup
+" autoload/hello.vim: read with the first call of a hello#...() function
 call goda#register('hello', '/path/to/hello/hello')  " or a Funcref
-" anywhere later
-echo goda#request('hello', 'greet', 'world')
+
+function! hello#greet(name) abort
+  return goda#request('hello', 'greet', a:name)
+endfunction
 ```
 
 If something goes wrong, `echo goda#log()` shows what the binary wrote to

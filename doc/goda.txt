@@ -72,10 +72,12 @@ goda#register({plugin}, {starter})
 		yet, stopped, or exited).  {starter} is the binary, as for
 		|goda#start()|, or a |Funcref| that starts it (and may check
 		more, such as whether the binary was built).  A plugin calls
-		it from its plugin/ file, which costs nothing at startup: >vim
+		it at the top of its autoload script, which Vim reads with
+		the first call of one of its functions (from its plugin/ file
+		it would read goda.vim's at startup): >vim
 
-			" plugin/hello.vim
-			call goda#register('hello', function('hello#start'))
+			" autoload/hello.vim
+			call goda#register('hello', function('s:start'))
 <
 		and its requests need no start of their own: >vim
 
@@ -240,8 +242,8 @@ Q: Nothing happens.
 A: Check |goda#plugins()| and |goda#log()|.
 
 Q: When should a plugin call |goda#start()|?
-A: It need not: |goda#register()| in its plugin/ file, and the first
-   request starts the binary.
+A: It need not: |goda#register()| at the top of its autoload script, and
+   the first request starts the binary.
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:
