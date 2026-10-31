@@ -85,4 +85,41 @@ call goda#stop()
 sleep 100m
 call s:add("stopped\t" . goda#is_running())
 
+" goda#register(): a request starts the binary, by its path or a Funcref, and
+" starts it again once it was stopped.
+call goda#register('other', $GODA_BIN2)
+call s:rec('register_path', {-> goda#request('other', 'ping')})
+let s:started = 0
+function! s:start_test() abort
+  let s:started += 1
+  call goda#start($GODA_BIN)
+endfunction
+call goda#register('test', function('s:start_test'))
+call s:rec('register_func', {-> goda#request('test', 'echo', 'started')})
+call s:rec('register_notify', {-> goda#notify('test', 'echo', 1)})
+call goda#stop('test')
+sleep 100m
+call s:rec('register_again', {-> goda#request('test', 'echo', 'again')})
+call s:add("register_started\t" . s:started)
+" A start that does not start the plugin fails once, and is not tried again
+" until goda#register() is called again.
+let s:ghost = 0
+function! s:start_ghost() abort
+  let s:ghost += 1
+  call goda#start($GODA_BIN2)
+endfunction
+call goda#register('ghost', function('s:start_ghost'))
+call s:rec('register_ghost', {-> goda#request('ghost', 'ping')})
+call s:rec('register_ghost_again', {-> goda#request('ghost', 'ping')})
+call s:add("register_ghost_tries\t" . s:ghost)
+call goda#register('ghost', function('s:start_ghost'))
+call s:rec('register_ghost_retry', {-> goda#request('ghost', 'ping')})
+call s:add("register_ghost_retries\t" . s:ghost)
+" A starter that fails with an error of Vim.
+call goda#register('broken', {-> GodaNoSuchFunction()})
+call s:rec('register_broken', {-> goda#request('broken', 'ping')})
+call s:rec('register_reserved', {-> goda#register('goda', $GODA_BIN)})
+call s:rec('register_type', {-> goda#register('x', 1)})
+call goda#stop()
+
 qa!

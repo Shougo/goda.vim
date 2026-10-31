@@ -44,7 +44,8 @@ Requirements:
 
 Install goda.vim with your plugin manager.  A plugin binary is built by the
 user or by the plugin that ships it (see |goda_cmp#build()|), and started
-with |goda#start()|.
+with |goda#start()|, or by the first request once |goda#register()| said
+how.
 
 ==============================================================================
 FUNCTIONS                                                     *goda-functions*
@@ -64,6 +65,30 @@ goda#start({bin})
 		the handshake is first tried on a plain job that can time
 		out (|rpcrequest()| cannot), so the binary is started twice.
 
+                                                             *goda#register()*
+goda#register({plugin}, {starter})
+		Say how to start {plugin}: |goda#request()| and
+		|goda#notify()| start it when it is not running (not started
+		yet, stopped, or exited).  {starter} is the binary, as for
+		|goda#start()|, or a |Funcref| that starts it (and may check
+		more, such as whether the binary was built).  A plugin calls
+		it from its plugin/ file, which costs nothing at startup: >vim
+
+			" plugin/hello.vim
+			call goda#register('hello', function('hello#start'))
+<
+		and its requests need no start of their own: >vim
+
+			function! hello#greet(name) abort
+			  return goda#request('hello', 'greet', a:name)
+			endfunction
+<
+		A plugin a running binary serves already is not started
+		again.  When the start fails (the binary does not exist, or
+		does not serve {plugin}), the request throws why, and the
+		next ones throw at once without trying again, until
+		|goda#register()| or |goda#start()| is called again.
+
                                                                  *goda#stop()*
 goda#stop([{plugin}])
 		Stop the binary serving {plugin}, or all binaries when it is
@@ -76,12 +101,14 @@ goda#stop([{plugin}])
 goda#request({plugin}, {method} [, {arg}...])
 		Call {method} of {plugin} and wait for the result.  Throws
 		when the call fails or takes longer than
-		|g:goda#request_timeout|.
+		|g:goda#request_timeout|.  Starts {plugin} first when it is
+		not running and |goda#register()| said how.
 
                                                                *goda#notify()*
 goda#notify({plugin}, {method} [, {arg}...])
 		Call {method} of {plugin} without waiting for an answer.
-		Errors are logged (see |goda#log()|).
+		Errors are logged (see |goda#log()|).  Starts {plugin} as
+		|goda#request()| does.
 
                                                               *goda#plugins()*
 goda#plugins()
@@ -211,6 +238,10 @@ A: The binary was built with an old goda.vim module.  Update it as described
 
 Q: Nothing happens.
 A: Check |goda#plugins()| and |goda#log()|.
+
+Q: When should a plugin call |goda#start()|?
+A: It need not: |goda#register()| in its plugin/ file, and the first
+   request starts the binary.
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

@@ -10,7 +10,8 @@
 "   Neovim  jobstart({'rpc': v:true}), msgpack-rpc, rpcrequest()
 "   Vim     job_start({'mode': 'json'}), JSON channel, ch_evalexpr()
 "
-" goda#request() and goda#notify() hide the difference.
+" goda#request() and goda#notify() hide the difference. They start the binary
+" of a plugin that is not running if goda#register() said how.
 
 " Must equal sdk.Protocol in the Go module (a test checks it). Bumped only when
 " an old binary and a new autoload can no longer work together.
@@ -20,6 +21,9 @@ let s:instances = {}  " binary path -> instance
 let s:routes = {}     " plugin name -> instance
 let s:failed = {}     " binary path -> instance whose start failed (for goda#log())
 let s:notify_errors = []  " errors of functions plugins called with Notify
+let s:starters = {}   " plugin name -> binary path or Funcref (goda#register())
+let s:start_failed = {}  " plugin name -> why its start by goda#register() failed
+let s:starting = {}  " plugin names being started (a starter that asks for its plugin)
 " An instance is {'bin', 'job' (Vim), 'chan' and 'job_id' (Neovim), 'log',
 " 'plugins', 'status'}. status is the exit status once the process ended,
 " v:null before.
@@ -244,6 +248,11 @@ function! s:route(plugin) abort
     throw 'goda: the plugin name "goda" is reserved (use goda#plugins())'
   endif
   let inst = get(s:routes, a:plugin, v:null)
+  if (inst is v:null || !s:alive(inst)) && has_key(s:starters, a:plugin)
+        \ && !has_key(s:starting, a:plugin)
+    call s:autostart(a:plugin)
+    let inst = get(s:routes, a:plugin, v:null)
+  endif
   if inst is v:null
     throw 'goda: unknown plugin "' . a:plugin . '" (is its binary started? see goda#plugins())'
   endif
@@ -253,8 +262,54 @@ function! s:route(plugin) abort
   return inst
 endfunction
 
+" Start the plugin as goda#register() said. A start that failed is not tried
+" again (every request would wait for it and fail the same way): its error is
+" given until goda#register() or goda#start() is called again.
+function! s:autostart(plugin) abort
+  if has_key(s:start_failed, a:plugin)
+    throw 'goda: plugin "' . a:plugin . '" could not be started; call goda#register() or goda#start()'
+          \ . ' again to try again. It failed with: ' . s:start_failed[a:plugin]
+  endif
+  let Starter = s:starters[a:plugin]
+  let s:starting[a:plugin] = 1
+  try
+    if type(Starter) == v:t_func
+      call Starter()
+    else
+      call goda#start(Starter)
+    endif
+    if !goda#is_running(a:plugin)
+      throw 'goda: starting plugin "' . a:plugin . '" did not start it ('
+            \ . (type(Starter) == v:t_func ? string(Starter) : Starter) . ' does not serve it)'
+    endif
+  catch
+    " (An error of Vim cannot be thrown again as it is.)
+    let msg = v:exception =~# '^Vim' ? 'goda: starting plugin "' . a:plugin . '" failed: ' . v:exception : v:exception
+    let s:start_failed[a:plugin] = msg
+    throw msg
+  finally
+    call remove(s:starting, a:plugin)
+  endtry
+endfunction
+
 " ---------------------------------------------------------------------------
 " Public API
+
+" How to start PLUGIN when it is asked for and not running: STARTER is the
+" binary (for goda#start()), or a Funcref that starts it. A plugin calls it
+" from its plugin/ file, and its requests start the binary when they need it.
+function! goda#register(plugin, starter) abort
+  if a:plugin ==# 'goda'
+    throw 'goda: the plugin name "goda" is reserved'
+  endif
+  if type(a:starter) != v:t_string && type(a:starter) != v:t_func
+    throw 'goda: goda#register(): the starter is a binary path or a Funcref'
+  endif
+  let s:starters[a:plugin] = a:starter
+  if has_key(s:start_failed, a:plugin)
+    call remove(s:start_failed, a:plugin)
+  endif
+endfunction
 
 " Start a plugin binary and return the names of the plugins it contains. Safe
 " to call again for a binary that is already running. Throws if the binary
@@ -339,6 +394,9 @@ function! goda#start(bin) abort
   let s:instances[bin] = inst
   for name in plugins
     let s:routes[name] = inst
+    if has_key(s:start_failed, name)
+      call remove(s:start_failed, name)
+    endif
   endfor
   return copy(plugins)
 endfunction

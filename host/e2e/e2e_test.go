@@ -176,6 +176,13 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		"after_notify":      `["after notify"]`,
 		"after_late_answer": `["after the late answer"]`,
 		"stopped":           "0",
+		// goda#register()
+		"register_path":          `"pong"`,
+		"register_func":          `["started"]`,
+		"register_again":         `["again"]`,
+		"register_started":       "2",
+		"register_ghost_tries":   "1",
+		"register_ghost_retries": "2",
 	}
 	for name, w := range want {
 		if res[name] != w {
@@ -247,6 +254,21 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		if v := res[name]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, want) {
 			t.Errorf("%s = %q, want an exception mentioning %q", name, v, want)
 		}
+	}
+	for name, want := range map[string]string{
+		"register_ghost":       `did not start it`,
+		"register_ghost_again": `could not be started`,
+		"register_ghost_retry": `did not start it`,
+		"register_broken":      `starting plugin "broken" failed: Vim`,
+		"register_reserved":    "reserved",
+		"register_type":        "a binary path or a Funcref",
+	} {
+		if v := res[name]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, want) {
+			t.Errorf("%s = %q, want an exception mentioning %q", name, v, want)
+		}
+	}
+	if strings.HasPrefix(res["register_notify"], "EXC") {
+		t.Errorf("register_notify failed: %s", res["register_notify"])
 	}
 	// The reason the binary gave, not a guess about module versions.
 	if v := res["exits"]; !strings.Contains(v, "exited during the handshake (status 3)") ||
