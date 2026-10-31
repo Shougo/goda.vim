@@ -24,6 +24,7 @@ let s:notify_errors = []  " errors of functions plugins called with Notify
 let s:starters = {}   " plugin name -> binary path or Funcref (goda#register())
 let s:start_failed = {}  " plugin name -> why its start by goda#register() failed
 let s:starting = {}  " plugin names being started (a starter that asks for its plugin)
+let s:stopping = 0   " goda#stop() is running
 " An instance is {'bin', 'job' (Vim), 'chan' and 'job_id' (Neovim), 'log',
 " 'plugins', 'status'}. status is the exit status once the process ended,
 " v:null before.
@@ -249,7 +250,7 @@ function! s:route(plugin) abort
   endif
   let inst = get(s:routes, a:plugin, v:null)
   if (inst is v:null || !s:alive(inst)) && has_key(s:starters, a:plugin)
-        \ && !has_key(s:starting, a:plugin)
+        \ && !has_key(s:starting, a:plugin) && !s:stopping
     call s:autostart(a:plugin)
     let inst = get(s:routes, a:plugin, v:null)
   endif
@@ -404,6 +405,17 @@ endfunction
 
 " Stop the binary that serves PLUGIN, or all binaries without an argument.
 function! goda#stop(...) abort
+  " While it waits for a binary to exit, Vim runs timers and callbacks: a
+  " request of theirs does not start a registered plugin again meanwhile.
+  let s:stopping += 1
+  try
+    call call('s:stop', a:000)
+  finally
+    let s:stopping -= 1
+  endtry
+endfunction
+
+function! s:stop(...) abort
   let timeout = get(g:, 'goda#stop_timeout', 3000)
   if a:0 == 0
     for inst in values(s:instances)
