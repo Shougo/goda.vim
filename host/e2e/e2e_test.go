@@ -174,6 +174,7 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		// after a notification, and after the late answer arrived.
 		"after_slow":        `["still alive"]`,
 		"after_notify":      `["after notify"]`,
+		"notify_sequence":   `[1,2,3,4,5,6,7,8,9,10,11,12]`,
 		"after_late_answer": `["after the late answer"]`,
 		"stopped":           "0",
 		// goda#register()

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/Shougo/goda.vim/internal/msgpack"
+	"github.com/Shougo/goda.vim/internal/order"
 )
 
 // msgpack-rpc message kinds.
@@ -30,8 +31,12 @@ type reply struct {
 // rpc is a symmetric msgpack-rpc endpoint. Incoming requests run in their own
 // goroutines, so a handler may call back into the editor (rpc.call) while the
 // editor is blocked in rpcrequest() waiting for that very handler. That nested
-// pattern is how extensions use sdk.Host.
+// pattern is how extensions use sdk.Host. Notifications are handled one after
+// the other, in the order they came, and a request once those before it are
+// (internal/order).
 type rpc struct {
+	seq *order.Sequencer
+
 	dec  *msgpack.Decoder
 	w    io.Writer
 	logf func(format string, args ...any)
@@ -58,6 +63,7 @@ func newRPC(r io.Reader, w io.Writer, logf func(string, ...any)) *rpc {
 		logf:     logf,
 		pending:  map[int64]chan reply{},
 		handlers: map[string]handlerFunc{},
+		seq:      order.New(),
 		done:     make(chan struct{}),
 	}
 }
@@ -107,9 +113,9 @@ func (c *rpc) serve(ctx context.Context) error {
 			id, _ := msg[1].(int64)
 			method, _ := msg[2].(string)
 			params, _ := msg[3].([]any)
-			c.inflight.Go(func() {
+			c.inflight.Go(c.seq.Request(ctx, func() {
 				c.serveRequest(ctx, id, method, params)
-			})
+			}))
 		case kindResponse:
 			if len(msg) != 4 {
 				c.logf("ignoring malformed response: %v", v)
@@ -137,11 +143,11 @@ func (c *rpc) serve(ctx context.Context) error {
 				c.logf("editor error: %v", params)
 				continue
 			}
-			c.inflight.Go(func() {
+			c.inflight.Go(c.seq.Notification(ctx, func() {
 				if _, err := c.dispatch(ctx, method, params); err != nil {
 					c.logf("notification %s: %v", method, err)
 				}
-			})
+			}))
 		default:
 			c.logf("ignoring message of unknown kind %d", kind)
 		}

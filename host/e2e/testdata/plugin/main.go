@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Shougo/goda.vim/host"
@@ -15,6 +16,12 @@ import (
 )
 
 type testPlugin struct{}
+
+// received are the numbers of "record", in the order handled.
+var (
+	recordMu sync.Mutex
+	received []int64
+)
 
 func (testPlugin) Name() string { return "test" }
 
@@ -34,6 +41,24 @@ func (testPlugin) Close(context.Context) error {
 func (testPlugin) Handlers() map[string]sdk.Handler {
 	return map[string]sdk.Handler{
 		"echo": func(_ context.Context, _ sdk.Host, p []any) (any, error) { return p, nil },
+
+		// record(n), as notifications: the first ones take longer, and
+		// they must still be handled in order.
+		"record": func(_ context.Context, _ sdk.Host, p []any) (any, error) {
+			n, _ := p[0].(int64)
+			time.Sleep(time.Duration(max(0, 10-n)) * time.Millisecond)
+			recordMu.Lock()
+			received = append(received, n)
+			recordMu.Unlock()
+			return nil, nil
+		},
+		// recorded: what record got, once the notifications before this
+		// request are handled.
+		"recorded": func(context.Context, sdk.Host, []any) (any, error) {
+			recordMu.Lock()
+			defer recordMu.Unlock()
+			return append([]int64{}, received...), nil
+		},
 
 		"meta": func(_ context.Context, h sdk.Host, _ []any) (any, error) { return h.Meta().Host, nil },
 

@@ -67,6 +67,11 @@ type Host interface {
 // nil, bool, int64, float64, string, []any and map[string]any, the same in
 // every editor. The result must be made of the same kinds (or of types that
 // round-trip through encoding/json, see Generic).
+//
+// The notifications of the editor are handled one after the other, in the
+// order they were sent, and a request once the notifications sent before it
+// are; requests run concurrently. A handler of a notification that waits
+// long holds up those after it.
 type Handler func(ctx context.Context, h Host, params []any) (any, error)
 
 // Plugin is a unit of functionality served to the editor.

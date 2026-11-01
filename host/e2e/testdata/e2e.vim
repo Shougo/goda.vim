@@ -65,6 +65,12 @@ call s:rec('unknown_plugin', {-> goda#request('nope', 'echo')})
 call s:rec('slow', {-> goda#request('test', 'slow')})
 call s:rec('after_slow', {-> goda#request('test', 'echo', 'still alive')})
 
+" Notifications are handled in order, before the requests after them.
+for i in range(1, 12)
+  call goda#notify('test', 'record', i)
+endfor
+call s:rec('notify_sequence', {-> goda#request('test', 'recorded')})
+
 call s:rec('notify', {-> goda#notify('test', 'echo', 1)})
 call s:rec('after_notify', {-> goda#request('test', 'echo', 'after notify')})
 

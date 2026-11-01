@@ -110,7 +110,9 @@ goda#request({plugin}, {method} [, {arg}...])
 goda#notify({plugin}, {method} [, {arg}...])
 		Call {method} of {plugin} without waiting for an answer.
 		Errors are logged (see |goda#log()|).  Starts {plugin} as
-		|goda#request()| does.
+		|goda#request()| does.  The notifications are handled in the
+		order they were sent, and before the requests sent after
+		them.
 
                                                               *goda#plugins()*
 goda#plugins()
@@ -180,9 +182,15 @@ outside goda.vim, such as the fakes in tests.  A capability added later is a
 separate interface that the Host may implement, found with a type
 assertion, as `sdk.Closer` is for plugins.
 
-Requests run concurrently, each in its own goroutine, and are not ordered.
-Carry a sequence number if order matters.  Use `sdk.Guard` around code you do
-not control, to recover from panics and enforce a deadline.
+What the editor sends is handled in the order it was sent where it can be:
+the notifications (|goda#notify()|) one after the other, in that order, and
+a request (|goda#request()|) once the notifications sent before it are
+handled.  Requests themselves run concurrently, each in its own goroutine (a
+handler may call back into the editor, which may send another request
+meanwhile), and a notification does not wait for them.  So a notification
+handler should not wait long: those after it wait for it.  Use `sdk.Guard`
+around code you do not control, to recover from panics and enforce a
+deadline.
 
 stdout belongs to the protocol; `fmt.Println` is redirected to stderr.  Use
 stderr or `log` for diagnostics and read it with |goda#log()|.

@@ -39,6 +39,7 @@ import (
 	"sync"
 
 	"github.com/Shougo/goda.vim/internal/jsonval"
+	"github.com/Shougo/goda.vim/internal/order"
 	"github.com/Shougo/goda.vim/sdk"
 )
 
@@ -99,7 +100,11 @@ type reply struct {
 
 // conn is one JSON channel. Requests from Vim run in their own goroutines, so
 // a handler may call back into Vim while Vim waits for that very handler.
+// Notifications are handled one after the other, in the order Vim sent them,
+// and a request once those before it are (internal/order).
 type conn struct {
+	seq *order.Sequencer
+
 	dec      *json.Decoder
 	w        io.Writer
 	logf     func(format string, args ...any)
@@ -127,6 +132,7 @@ func newConn(r io.Reader, w io.Writer, logf func(string, ...any)) *conn {
 		handlers: map[string]sdk.Handler{},
 		pending:  map[int64]chan reply{},
 		done:     make(chan struct{}),
+		seq:      order.New(),
 	}
 }
 
@@ -158,9 +164,12 @@ func (c *conn) serve(ctx context.Context) error {
 			c.deliver(id, msg[1])
 			continue
 		}
-		c.inflight.Go(func() {
-			c.serveRequest(ctx, id, msg[1])
-		})
+		serve := func() { c.serveRequest(ctx, id, msg[1]) }
+		if id == 0 {
+			c.inflight.Go(c.seq.Notification(ctx, serve))
+		} else {
+			c.inflight.Go(c.seq.Request(ctx, serve))
+		}
 	}
 }
 
