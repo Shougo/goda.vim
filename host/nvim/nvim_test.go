@@ -158,7 +158,8 @@ func TestNestedHostCall(t *testing.T) {
 	if req[0] != int64(0) || req[2] != "nvim_call_function" {
 		t.Fatalf("expected nvim_call_function request, got %v", req)
 	}
-	if want := []any{"getcompletion", []any{"str", "function"}}; !reflect.DeepEqual(req[3], want) {
+	// Through goda#_ncall (the notifications before it run first).
+	if want := []any{"goda#_ncall", []any{"getcompletion", []any{"str", "function"}}}; !reflect.DeepEqual(req[3], want) {
 		t.Fatalf("params = %v, want %v", req[3], want)
 	}
 	// 2. The editor answers.
@@ -174,7 +175,7 @@ func TestStructArgumentsAreEncodable(t *testing.T) {
 	ed := startPlugin(t, testTable())
 	ed.send([]any{0, 1, "t.struct", []any{}})
 	req := ed.recv()
-	want := []any{"f", []any{map[string]any{"n": int64(5), "word": "w"}}}
+	want := []any{"goda#_ncall", []any{"f", []any{map[string]any{"n": int64(5), "word": "w"}}}}
 	if !reflect.DeepEqual(req[3], want) {
 		t.Fatalf("params = %v, want %v", req[3], want)
 	}
@@ -187,7 +188,7 @@ func TestEvalAndCmd(t *testing.T) {
 
 	ed.send([]any{0, 1, "t.eval", []any{"1+2"}})
 	req := ed.recv()
-	if req[2] != "nvim_eval" || !reflect.DeepEqual(req[3], []any{"1+2"}) {
+	if req[2] != "nvim_call_function" || !reflect.DeepEqual(req[3], []any{"goda#_neval", []any{"1+2"}}) {
 		t.Fatalf("got %v", req)
 	}
 	ed.send([]any{1, req[1], nil, int64(3)})
@@ -197,7 +198,7 @@ func TestEvalAndCmd(t *testing.T) {
 
 	ed.send([]any{0, 2, "t.cmd", []any{"let g:x = 1"}})
 	req = ed.recv()
-	if req[2] != "nvim_command" {
+	if req[2] != "nvim_call_function" || !reflect.DeepEqual(req[3], []any{"goda#_ncmd", []any{"let g:x = 1"}}) {
 		t.Fatalf("got %v", req)
 	}
 	ed.send([]any{1, req[1], nil, nil})

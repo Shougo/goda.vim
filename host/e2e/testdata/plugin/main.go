@@ -52,6 +52,21 @@ func (testPlugin) Handlers() map[string]sdk.Handler {
 			recordMu.Unlock()
 			return nil, nil
 		},
+		// notifyRequest notifies a function that makes a request of its own,
+		// and answers after that request started (were the notification
+		// run while the editor waits for this answer): Neovim wants the
+		// answer of the inner request first.
+		"notifyRequest": func(ctx context.Context, h sdk.Host, _ []any) (any, error) {
+			if err := h.Notify(ctx, "GodaTestInner"); err != nil {
+				return nil, err
+			}
+			time.Sleep(100 * time.Millisecond)
+			return "outer", nil
+		},
+		"slowEcho": func(_ context.Context, _ sdk.Host, p []any) (any, error) {
+			time.Sleep(300 * time.Millisecond)
+			return p, nil
+		},
 		// recorded: what record got, once the notifications before this
 		// request are handled.
 		"recorded": func(context.Context, sdk.Host, []any) (any, error) {

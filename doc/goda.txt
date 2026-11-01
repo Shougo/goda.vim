@@ -173,7 +173,11 @@ into a struct, `sdk.Generic` converts a struct into a result.
 `Notify(ctx, fn, args...)` calls one without waiting for it, `Eval` evaluates
 an expression, `Cmd` runs an Ex command, `Meta().Host` is "vim" or "nvim".
 The editor runs what a plugin sends in the order it was sent, so a `Notify`
-followed by a `Call` runs first.  `Notify` returns once the call is sent; an
+followed by a `Call` runs first.  Neovim runs a `Notify` once it is back to
+its loop, or before the next `Call`, `Eval` or `Cmd` of the plugin: not
+while it waits in |rpcrequest()|, where a request the function made (an
+autocommand of a window it opened, say) would come between the request
+waited for and its answer, which Neovim refuses.  `Notify` returns once the call is sent; an
 error of the function is not returned but kept for |goda#log()| (as lines
 starting with "[notify]").
 

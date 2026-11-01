@@ -65,6 +65,19 @@ call s:rec('unknown_plugin', {-> goda#request('nope', 'echo')})
 call s:rec('slow', {-> goda#request('test', 'slow')})
 call s:rec('after_slow', {-> goda#request('test', 'echo', 'still alive')})
 
+" A notification that makes a request, sent while the editor waits for the
+" answer of another one: both answered (Neovim: in the order it wants).
+function! GodaTestInner() abort
+  try
+    let g:goda_inner = goda#request('test', 'slowEcho', 'inner')
+  catch
+    let g:goda_inner = 'EXC ' . v:exception
+  endtry
+endfunction
+call s:rec('notify_request', {-> goda#request('test', 'notifyRequest')})
+sleep 600m
+call s:add("notify_request_inner\t" . json_encode(get(g:, 'goda_inner', 'not run')))
+
 " Notifications are handled in order, before the requests after them.
 for i in range(1, 12)
   call goda#notify('test', 'record', i)

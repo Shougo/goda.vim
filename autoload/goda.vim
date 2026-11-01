@@ -508,7 +508,30 @@ endfunction
 
 " sdk.Host.Notify: nobody waits for the result, so an error is kept for
 " goda#log() instead of being answered.
+"
+" Neovim runs the notifications of a channel while it waits in rpcrequest()
+" on it, and wants the answers of the requests it makes meanwhile before
+" that of the one it waits for: a notification that makes a request (an
+" autocommand of a window it opens) while the binary answers the request
+" waited for fails ("unknown request id"). So on Neovim a notification is
+" run once Neovim is back to its loop (a timer, which does not run in
+" rpcrequest()), or before the next call of the binary (goda#_ncall() and
+" the others), so that it still runs before what the binary sends after it.
+let s:pending = get(s:, 'pending', [])
+let s:flush_timer = get(s:, 'flush_timer', -1)
+
 function! goda#_notify(fn, args) abort
+  if has('nvim')
+    call add(s:pending, [a:fn, a:args])
+    if s:flush_timer < 0
+      let s:flush_timer = timer_start(0, {-> s:flush_timer_fired()})
+    endif
+    return
+  endif
+  call s:run_notify(a:fn, a:args)
+endfunction
+
+function! s:run_notify(fn, args) abort
   try
     call call(a:fn, a:args)
   catch
@@ -517,6 +540,36 @@ function! goda#_notify(fn, args) abort
       call remove(s:notify_errors, 0)
     endif
   endtry
+endfunction
+
+function! s:flush_timer_fired() abort
+  let s:flush_timer = -1
+  call goda#_flush()
+endfunction
+
+" Run the notifications not run yet, in order.
+function! goda#_flush() abort
+  while !empty(s:pending)
+    let [fn, args] = remove(s:pending, 0)
+    call s:run_notify(fn, args)
+  endwhile
+endfunction
+
+" Helpers called BY the plugin binary on the Neovim transport (host/nvim):
+" the notifications sent before first. Errors are Neovim's own.
+function! goda#_ncall(fn, args) abort
+  call goda#_flush()
+  return call(a:fn, a:args)
+endfunction
+
+function! goda#_neval(expr) abort
+  call goda#_flush()
+  return eval(a:expr)
+endfunction
+
+function! goda#_ncmd(cmd) abort
+  call goda#_flush()
+  execute a:cmd
 endfunction
 
 function! goda#_eval(expr) abort

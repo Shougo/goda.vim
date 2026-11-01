@@ -29,7 +29,9 @@ func (h *Host) Call(ctx context.Context, fn string, args ...any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return h.c.call(ctx, "nvim_call_function", fn, norm)
+	// Through goda#_ncall: the notifications sent before run first (they
+	// wait for Neovim's loop, see autoload/goda.vim).
+	return h.c.call(ctx, "nvim_call_function", "goda#_ncall", []any{fn, norm})
 }
 
 // Notify sends nvim_call_function as a msgpack-rpc notification. It goes
@@ -47,11 +49,11 @@ func (h *Host) Notify(_ context.Context, fn string, args ...any) error {
 }
 
 func (h *Host) Eval(ctx context.Context, expr string) (any, error) {
-	return h.c.call(ctx, "nvim_eval", expr)
+	return h.c.call(ctx, "nvim_call_function", "goda#_neval", []any{expr})
 }
 
 func (h *Host) Cmd(ctx context.Context, cmd string) error {
-	_, err := h.c.call(ctx, "nvim_command", cmd)
+	_, err := h.c.call(ctx, "nvim_call_function", "goda#_ncmd", []any{cmd})
 	return err
 }
 
