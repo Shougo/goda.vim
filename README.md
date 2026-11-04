@@ -55,12 +55,17 @@ func (hello) Name() string { return "hello" }
 func (hello) Handlers() map[string]sdk.Handler {
 	return map[string]sdk.Handler{
 		"greet": func(ctx context.Context, h sdk.Host, params []any) (any, error) {
+			// The arguments: a string (an error otherwise).
+			var name string
+			if err := sdk.DecodeArgs(params, &name); err != nil {
+				return nil, err
+			}
 			// Ask the editor for something: its current working directory.
 			cwd, err := h.Call(ctx, "getcwd")
 			if err != nil {
 				return nil, err
 			}
-			return fmt.Sprintf("hello, %v, from %s (cwd %v)", params[0], h.Meta().Host, cwd), nil
+			return fmt.Sprintf("hello, %s, from %s (cwd %v)", name, h.Meta().Host, cwd), nil
 		},
 	}
 }

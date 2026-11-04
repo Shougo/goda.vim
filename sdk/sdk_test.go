@@ -100,3 +100,38 @@ func TestGuardCancel(t *testing.T) {
 		t.Fatalf("want Canceled, got %v", err)
 	}
 }
+
+func TestDecodeArgs(t *testing.T) {
+	type opts struct {
+		Upper bool `json:"upper"`
+	}
+	var name string
+	var o opts
+	times := 1
+	params := []any{"Shougo", map[string]any{"upper": true}}
+	if err := DecodeArgs(params, &name, &o, Optional(&times)); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Shougo" || !o.Upper || times != 1 {
+		t.Errorf("%q %+v %d", name, o, times)
+	}
+	if err := DecodeArgs([]any{"x", nil, int64(3)}, &name, &o, Optional(&times)); err != nil || times != 3 {
+		t.Errorf("times %d: %v", times, err)
+	}
+	for _, c := range []struct {
+		params []any
+		dsts   []any
+		err    string
+	}{
+		{[]any{}, []any{&name}, "1 argument expected, got 0"},
+		{[]any{"a", "b"}, []any{&name}, "1 argument expected, got 2"},
+		{[]any{"a", "b", "c"}, []any{&name, Optional(&name)}, "1 to 2 arguments expected, got 3"},
+		{[]any{"a", "b"}, []any{&name, &times}, "argument 2: json: cannot unmarshal"},
+		{[]any{"a"}, []any{Optional(&name), &times}, "argument 2 is required after an optional one"},
+	} {
+		err := DecodeArgs(c.params, c.dsts...)
+		if err == nil || !strings.Contains(err.Error(), c.err) {
+			t.Errorf("%v: %v, want %q", c.params, err, c.err)
+		}
+	}
+}

@@ -105,6 +105,56 @@ func Decode(src, dst any) error {
 	return json.Unmarshal(b, dst)
 }
 
+// DecodeArgs copies the params of a Handler into dsts, one by one, as Decode:
+//
+//	var name string
+//	times := 1
+//	if err := sdk.DecodeArgs(params, &name, sdk.Optional(&times)); err != nil {
+//		return nil, err
+//	}
+//
+// The params must be as many as dsts; the last ones may be missing when they
+// are Optional (they keep their value then). An error says which argument
+// (from 1) is wrong.
+func DecodeArgs(params []any, dsts ...any) error {
+	required := 0
+	for i, d := range dsts {
+		if _, ok := d.(optional); ok {
+			continue
+		}
+		if required != i {
+			return fmt.Errorf("sdk.DecodeArgs: argument %d is required after an optional one", i+1)
+		}
+		required++
+	}
+	if len(params) < required || len(params) > len(dsts) {
+		want := fmt.Sprint(required)
+		if required != len(dsts) {
+			want = fmt.Sprintf("%d to %d", required, len(dsts))
+		}
+		noun := "arguments"
+		if want == "1" {
+			noun = "argument"
+		}
+		return fmt.Errorf("%s %s expected, got %d", want, noun, len(params))
+	}
+	for i, p := range params {
+		d := dsts[i]
+		if o, ok := d.(optional); ok {
+			d = o.dst
+		}
+		if err := Decode(p, d); err != nil {
+			return fmt.Errorf("argument %d: %w", i+1, err)
+		}
+	}
+	return nil
+}
+
+// Optional marks a dst of DecodeArgs that may be missing (the last ones).
+func Optional(dst any) any { return optional{dst} }
+
+type optional struct{ dst any }
+
 // Generic converts a typed value (with json tags) into the generic form a
 // Handler may return. Numbers become json.Number, so integers stay integers
 // through any codec.
