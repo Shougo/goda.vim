@@ -135,3 +135,35 @@ func TestDecodeArgs(t *testing.T) {
 		}
 	}
 }
+
+// The generic values that dst holds as they are keep their integers.
+func TestDecodeGeneric(t *testing.T) {
+	type params map[string]any
+	src := map[string]any{"n": int64(1), "l": []any{int64(2)}}
+	var m map[string]any
+	var p params
+	var a any
+	var l []any
+	for _, dst := range []any{&m, &p, &a} {
+		if err := Decode(src, dst); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Decode(src["l"], &l); err != nil {
+		t.Fatal(err)
+	}
+	if m["n"] != int64(1) || p["n"] != int64(1) || a.(map[string]any)["n"] != int64(1) || l[0] != int64(2) {
+		t.Errorf("%#v %#v %#v %#v", m, p, a, l)
+	}
+	var n int
+	if err := Decode(int64(3), &n); err != nil || n != 3 {
+		t.Errorf("int: %d %v", n, err)
+	}
+	s := "keep"
+	if err := Decode(nil, &s); err != nil || s != "keep" {
+		t.Errorf("nil: %q %v", s, err)
+	}
+	if err := Decode(src, &s); err == nil {
+		t.Error("a map into a string must be an error")
+	}
+}

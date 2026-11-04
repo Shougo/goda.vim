@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 )
 
 // Protocol is the version of the contract between the Vim script side
@@ -97,7 +98,20 @@ type Closer interface {
 // Decode copies a generic value, such as an element of a Handler's params,
 // into dst (a pointer to a typed value). It goes through JSON, so json tags
 // apply and numbers convert whichever form they arrived in.
+//
+// A src that dst can hold as it is (a string into a *string, a
+// map[string]any into a *map[string]any, anything into an *any) is set
+// without a copy: its integers stay int64 instead of becoming float64 as
+// JSON would make them.
 func Decode(src, dst any) error {
+	if src != nil {
+		if d := reflect.ValueOf(dst); d.Kind() == reflect.Pointer && !d.IsNil() {
+			if v := reflect.ValueOf(src); v.Type().AssignableTo(d.Elem().Type()) {
+				d.Elem().Set(v)
+				return nil
+			}
+		}
+	}
 	b, err := json.Marshal(src)
 	if err != nil {
 		return err

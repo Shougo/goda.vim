@@ -167,7 +167,9 @@ handlers `func(ctx, h sdk.Host, params []any) (any, error)`.  The binary's
 
 Parameters and results are generic values: nil, bool, int64, float64, string,
 []any and map[string]any, the same in both editors.  `sdk.Decode` copies one
-into a struct, `sdk.Generic` converts a struct into a result.
+into a struct, `sdk.Generic` converts a struct into a result.  A value the
+destination holds as it is (a map[string]any into a map[string]any, anything
+into an any) is not copied, so its integers stay int64.
 `sdk.DecodeArgs(params, &a, &b, sdk.Optional(&c))` copies the params one by
 one: an error says which one is missing or of another type, and the
 `sdk.Optional` ones at the end may be missing (they keep their value). >go
