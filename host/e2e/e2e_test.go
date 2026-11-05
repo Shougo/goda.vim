@@ -281,8 +281,10 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 	if v := res["exits_log"]; !strings.Contains(v, "["+filepath.Base(f.binExits)+"] configuration: unknown filter") {
 		t.Errorf("goda#log() after a failed start = %s", v)
 	}
-	// Vim gives up after g:goda#request_timeout; Neovim cannot and waits.
-	if ed.name == "vim" {
+	// Vim gives up after g:goda#request_timeout, and Neovim whose
+	// vim.rpcrequest() takes a timeout (0.13); an older Neovim waits.
+	timesOut := res["rpc_timeout"] == "1"
+	if timesOut {
 		if v := res["slow"]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, "no answer") {
 			t.Errorf("slow = %q, want a 'no answer' exception", v)
 		}
@@ -290,8 +292,11 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		t.Errorf("slow = %q, want \"late\"", v)
 	}
 	// A binary that never answers the handshake does not hang the editor,
-	// Neovim included (whose rpcrequest() cannot time out).
-	silentWant := map[string]string{"vim": "no answer", "nvim": "did not answer the handshake"}[ed.name]
+	// an older Neovim included (where it is tried on a plain job first).
+	silentWant := "no answer"
+	if !timesOut {
+		silentWant = "did not answer the handshake"
+	}
 	if v := res["silent"]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, silentWant) {
 		t.Errorf("silent = %q, want an exception mentioning %q", v, silentWant)
 	}

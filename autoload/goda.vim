@@ -130,10 +130,19 @@ function! s:wait_exit(inst, timeout) abort
   return a:inst.status
 endfunction
 
-" Neovim's rpcrequest() cannot time out, and neither timers nor anything
-" else runs while it waits: a binary that never answers the handshake (not a
-" goda.vim binary at all, say) would hang Neovim for good. So in Neovim the
-" handshake is first tried on a separate, plain job, where waiting can be
+" Whether vim.rpcrequest() of this Neovim can time out (0.13 on): then a
+" request is given up after g:goda#request_timeout, the handshake too.
+function! s:nvim_timeout() abort
+  if !exists('s:nvim_has_timeout')
+    let s:nvim_has_timeout = v:lua.require'goda'.has_timeout()
+  endif
+  return s:nvim_has_timeout
+endfunction
+
+" A Neovim whose rpcrequest() cannot time out (before 0.13), where neither
+" timers nor anything else runs while it waits: a binary that never answers
+" the handshake (not a goda.vim binary at all, say) would hang Neovim for
+" good. So there the handshake is first tried on a separate, plain job, where waiting can be
 " bounded: the request is written with msgpackdump() and the answer read with
 " msgpackparse(). Only a binary that answered is started again for real.
 " Returns the answer [1, 1, error, result], or throws.
@@ -232,7 +241,18 @@ endfunction
 " Blocking call of a method of one binary, by its full name ('plugin.method').
 function! s:rpc(inst, name, args) abort
   if has('nvim')
-    return call('rpcrequest', [a:inst.chan, a:name] + a:args)
+    if !s:nvim_timeout()
+      return call('rpcrequest', [a:inst.chan, a:name] + a:args)
+    endif
+    let timeout = get(g:, 'goda#request_timeout', 10000)
+    let [ok, r] = v:lua.require'goda'.request(a:inst.chan, timeout, a:name, a:args)
+    if ok
+      return r
+    elseif r =~# '^Request timed out'
+      throw 'goda: no answer to ' . a:name . ' within ' . timeout
+            \ . ' ms (g:goda#request_timeout)'
+    endif
+    throw r
   endif
   let r = ch_evalexpr(job_getchannel(a:inst.job), [a:name] + a:args)
   if type(r) != v:t_dict
@@ -329,7 +349,9 @@ function! goda#start(bin) abort
 
   let inst = {'bin': bin, 'job': v:null, 'chan': 0, 'job_id': 0, 'log': [], 'plugins': [], 'status': v:null}
   if has('nvim')
-    call s:nvim_probe(inst)
+    if !s:nvim_timeout()
+      call s:nvim_probe(inst)
+    endif
     let chan = jobstart([bin, '--transport=nvim'], {
           \ 'rpc': v:true,
           \ 'on_stderr': function('s:nvim_on_stderr', [inst]),

@@ -23,6 +23,9 @@ endfunction
 
 " A short request timeout, to see what a plugin that answers too late does.
 let g:goda#request_timeout = 500
+" Whether this Neovim gives a request up too (vim.rpcrequest() with a
+" timeout, 0.13 on).
+call s:add("rpc_timeout\t" . (has('nvim') ? luaeval("require'goda'.has_timeout()") ? 1 : 0 : 1))
 
 try
   call s:add("start\t" . json_encode(goda#start($GODA_BIN)))
