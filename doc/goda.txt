@@ -12,6 +12,7 @@ Writing a plugin	|goda-plugin|
 Versions		|goda-versions|
 AI			|goda-ai|
 FAQ			|goda-faq|
+Future work		|goda-future-work|
 
 ==============================================================================
 INTRODUCTION                                               *goda-introduction*
@@ -298,6 +299,20 @@ A: Check |goda#plugins()| and |goda#log()|.
 Q: When should a plugin call |goda#start()|?
 A: It need not: |goda#register()| at the top of its autoload script, and
    the first request starts the binary.
+
+==============================================================================
+FUTURE WORK                                               *goda-future-work*
+
+The binary of a plugin built from the sources of the plugin installed.
+The Go side of a plugin comes from the version its configuration module
+requires (go.mod), and its Vim script from the plugin installed: updating
+the plugin needs "go get -u" in each configuration module too, or the
+binary is refused (|goda#register()| with a version) or fails.  A plugin
+manager that installs the plugins (goda-pm.vim) can write a go.work that
+uses their directories (those of a local plugin in development too), and a
+common build of goda.vim (goda#build(), which the build() of each plugin
+calls) builds with it: the Go side is then always that of the Vim script
+installed, without "go get -u".
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:
