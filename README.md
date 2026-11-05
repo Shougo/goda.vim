@@ -28,7 +28,7 @@ Do not name a plugin binary `goda`: `go install github.com/loov/goda@latest`
 ## Try it
 
 This builds and calls a plugin of ten lines. You need Go 1.26 or newer and
-Vim 9.1 or newer (with `+job` and `+channel`) or Neovim.
+Vim 9.1 or newer (with `+job` and `+channel`) or Neovim 0.11 or newer.
 
 ```sh
 mkdir hello && cd hello

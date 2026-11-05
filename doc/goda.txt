@@ -37,7 +37,8 @@ There are no commands.  Everything is a function.
 INSTALL                                                         *goda-install*
 
 Requirements:
-- Vim 9.1 or later built with |+job|, |+channel| and |+timers|, or Neovim.
+- Vim 9.1 or later built with |+job|, |+channel| and |+timers|, or Neovim
+  0.11 or later.
 - Go 1.26 or later, to build plugin binaries.  An older go command (1.21 or
   later) downloads Go 1.26 by itself when it builds, unless $GOTOOLCHAIN is
   "local".
