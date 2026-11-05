@@ -68,7 +68,7 @@ goda#start({bin})
 		binary is started twice.
 
                                                              *goda#register()*
-goda#register({plugin}, {starter})
+goda#register({plugin}, {starter} [, {opts}])
 		Say how to start {plugin}: |goda#request()| and
 		|goda#notify()| start it when it is not running (not started
 		yet, stopped, or exited).  {starter} is the binary, as for
@@ -92,6 +92,24 @@ goda#register({plugin}, {starter})
 		does not serve {plugin}), the request throws why, and the
 		next ones throw at once without trying again, until
 		|goda#register()| or |goda#start()| is called again.
+
+		{opts} is a |Dictionary|:
+		  version	The version of the Vim script of {plugin},
+				which its binary says too (the plugin is an
+				`sdk.ScriptVersioner`).  A binary of another
+				version, or one that says none (built before
+				it said one), is refused: |goda#start()| throws
+				that the binary is to be built again (or the
+				plugin updated, for a newer binary).
+		  module	The Go module of the plugin, for that
+				message ("go get -u {module}").
+		A plugin bumps its version when its Vim script and its
+		binary no longer work together: its users are told to
+		build again instead of meeting an unknown function. >vim
+
+			call goda#register('hello', function('s:start'),
+			      \ #{version: 1, module: 'github.com/you/hello'})
+<
 
                                                                  *goda#stop()*
 goda#stop([{plugin}])
@@ -223,6 +241,12 @@ editor closed the connection or the process was told to stop (SIGTERM,
 interrupt), last registered plugin first.  The editor is gone by then, so
 there is no Host, and requests may still be running.  All plugins together
 get `host.CloseTimeout` (3 seconds); then the process exits.
+
+A plugin whose Vim script and binary are updated together implements
+`sdk.ScriptVersioner`: `ScriptVersion() int`, the version of the Vim script
+it goes with, which its Vim script gives to |goda#register()| too.  A binary
+built before the plugin was updated is then refused with how to build it
+again, instead of failing on a function the Vim script no longer has.
 
 For developing without an editor, `--transport=jsonl` reads one JSON request
 per line on stdin: >

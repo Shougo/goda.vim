@@ -25,6 +25,9 @@ var (
 
 func (testPlugin) Name() string { return "test" }
 
+// ScriptVersion: the Vim script of "test" is of version 3 (sdk.ScriptVersioner).
+func (testPlugin) ScriptVersion() int { return 3 }
+
 // Close records that the host told the plugin to stop (sdk.Closer).
 func (testPlugin) Close(context.Context) error {
 	if path := os.Getenv("GODA_CLOSE_FILE"); path != "" {

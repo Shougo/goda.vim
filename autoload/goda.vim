@@ -24,6 +24,7 @@ let s:notify_errors = []  " errors of functions plugins called with Notify
 let s:starters = {}   " plugin name -> binary path or Funcref (goda#register())
 let s:start_failed = {}  " plugin name -> why its start by goda#register() failed
 let s:starting = {}  " plugin names being started (a starter that asks for its plugin)
+let s:script_versions = get(s:, 'script_versions', {})  " plugin name -> {version, module} (goda#register())
 let s:stopping = 0   " goda#stop() is running
 " An instance is {'bin', 'job' (Vim), 'chan' and 'job_id' (Neovim), 'log',
 " 'plugins', 'status'}. status is the exit status once the process ended,
@@ -320,14 +321,25 @@ endfunction
 " binary (for goda#start()), or a Funcref that starts it. A plugin calls it at
 " the top of its autoload script, and its requests start the binary when they
 " need it.
-function! goda#register(plugin, starter) abort
+function! goda#register(plugin, starter, opts = {}) abort
   if a:plugin ==# 'goda'
     throw 'goda: the plugin name "goda" is reserved'
   endif
   if type(a:starter) != v:t_string && type(a:starter) != v:t_func
     throw 'goda: goda#register(): the starter is a binary path or a Funcref'
   endif
+  if type(a:opts) != v:t_dict
+    throw 'goda: goda#register(): the options are a Dictionary'
+  endif
   let s:starters[a:plugin] = a:starter
+  " The version of the Vim script of the plugin (sdk.ScriptVersioner): a
+  " binary of another is refused by goda#start().
+  if has_key(a:opts, 'version')
+    let s:script_versions[a:plugin] = #{version: a:opts.version,
+          \ module: get(a:opts, 'module', '')}
+  elseif has_key(s:script_versions, a:plugin)
+    call remove(s:script_versions, a:plugin)
+  endif
   if has_key(s:start_failed, a:plugin)
     call remove(s:start_failed, a:plugin)
   endif
@@ -405,6 +417,18 @@ function! goda#start(bin) abort
           \ . ' (go get -u github.com/Shougo/goda.vim) and build again, or update the goda.vim plugin'
   endif
   let plugins = sort(keys(hello.plugins))
+  " Each plugin with the version of its Vim script: the binary is not of an
+  " older or a newer plugin (built before it was updated, say).
+  let versions = get(hello, 'scriptVersions', {})
+  for name in plugins
+    let want = get(s:script_versions, name, {})
+    let got = type(versions) == v:t_dict ? get(versions, name, 0) : 0
+    if !empty(want) && got != want.version
+      call s:kill(inst)
+      let s:failed[bin] = inst
+      throw s:version_error(bin, name, got, want)
+    endif
+  endfor
   for name in plugins
     let other = get(s:routes, name, v:null)
     if other isnot v:null && other.bin !=# bin && s:alive(other)
@@ -423,6 +447,22 @@ function! goda#start(bin) abort
     endif
   endfor
   return copy(plugins)
+endfunction
+
+" Why the binary bin of plugin name of the version got does not go with its
+" Vim script (want: {version, module}), and what to do.
+function! s:version_error(bin, name, got, want) abort
+  let rebuild = 'build the binary again'
+        \ . (a:want.module !=# '' ? ', with the plugin updated in the Go module that builds it'
+        \   . ' (go get -u ' . a:want.module . ' && go mod tidy)' : '')
+  if a:got > a:want.version
+    return 'goda: ' . a:bin . ' was built for a newer plugin "' . a:name . '" (version '
+          \ . a:got . ') than its Vim script (version ' . a:want.version . '):'
+          \ . ' update the plugin, or ' . rebuild
+  endif
+  return 'goda: ' . a:bin . ' was built for an older plugin "' . a:name . '"'
+        \ . (a:got > 0 ? ' (version ' . a:got . ')' : '')
+        \ . ' than its Vim script (version ' . a:want.version . '): ' . rebuild
 endfunction
 
 " Stop the binary that serves PLUGIN, or all binaries without an argument.

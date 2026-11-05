@@ -143,5 +143,19 @@ call s:rec('register_broken', {-> goda#request('broken', 'ping')})
 call s:rec('register_reserved', {-> goda#register('goda', $GODA_BIN)})
 call s:rec('register_type', {-> goda#register('x', 1)})
 call goda#stop()
+sleep 100m
+
+" The version of the Vim script of a plugin (sdk.ScriptVersioner): the
+" binary of another is refused, with how to build it again.
+call goda#register('test', $GODA_BIN, #{version: 4, module: 'example.com/test'})
+call s:rec('version_older', {-> goda#request('test', 'echo', 'x')})
+call goda#register('test', $GODA_BIN, #{version: 2})
+call s:rec('version_newer', {-> goda#request('test', 'echo', 'x')})
+call goda#register('other', $GODA_BIN2, #{version: 1})
+call s:rec('version_none', {-> goda#request('other', 'ping')})
+call goda#register('test', $GODA_BIN, #{version: 3})
+call s:rec('version_same', {-> goda#request('test', 'echo', 'v3')})
+call s:rec('register_opts', {-> goda#register('test', $GODA_BIN, 1)})
+call goda#stop()
 
 qa!

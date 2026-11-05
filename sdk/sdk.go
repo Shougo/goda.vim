@@ -84,6 +84,16 @@ type Plugin interface {
 	Handlers() map[string]Handler
 }
 
+// ScriptVersioner is a Plugin whose binary goes with its Vim script of one
+// version: ScriptVersion is that version, which the handshake tells the
+// editor. The Vim script says the version it is (goda#register() with
+// {'version': N}), and a binary of another version, or one that says none
+// (built before), is refused with how to build it again. Bump both when the
+// Vim script and the binary no longer work together.
+type ScriptVersioner interface {
+	ScriptVersion() int
+}
+
 // Closer is implemented by plugins that hold something to release (a child
 // process, a connection, a file). The host calls Close once, when the editor
 // closed the connection or the process was told to stop (SIGTERM, interrupt).

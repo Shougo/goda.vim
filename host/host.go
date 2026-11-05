@@ -112,10 +112,13 @@ func closePlugins(plugins []sdk.Plugin, timeout time.Duration) {
 // Table flattens the plugins into the method table the transports serve, keyed
 // by "plugin.method". It also adds goda.plugins, which answers with
 // {plugin: [methods...]}, and goda.hello, the handshake the editor performs
-// right after starting the binary: {protocol, version, plugins}.
+// right after starting the binary: {protocol, version, plugins,
+// scriptVersions} (scriptVersions: {plugin: version} of the plugins that are
+// sdk.ScriptVersioner).
 func Table(plugins ...sdk.Plugin) (map[string]sdk.Handler, error) {
 	table := map[string]sdk.Handler{}
 	listing := map[string]any{}
+	scriptVersions := map[string]any{}
 	seen := map[string]bool{}
 
 	for i, p := range plugins {
@@ -132,6 +135,9 @@ func Table(plugins ...sdk.Plugin) (map[string]sdk.Handler, error) {
 			return nil, fmt.Errorf("plugin %q registered twice", name)
 		}
 		seen[name] = true
+		if v, ok := p.(sdk.ScriptVersioner); ok {
+			scriptVersions[name] = int64(v.ScriptVersion())
+		}
 
 		var methods []string
 		for m, h := range p.Handlers() {
@@ -160,6 +166,8 @@ func Table(plugins ...sdk.Plugin) (map[string]sdk.Handler, error) {
 			"protocol": int64(sdk.Protocol),
 			"version":  moduleVersion(),
 			"plugins":  listing,
+			// Added to protocol 1: an older goda.vim ignores it.
+			"scriptVersions": scriptVersions,
 		}, nil
 	}
 	return table, nil

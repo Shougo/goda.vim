@@ -70,6 +70,31 @@ func TestHello(t *testing.T) {
 	if !reflect.DeepEqual(m["plugins"], map[string]any{"cmp": []any{"complete"}}) {
 		t.Errorf("plugins = %v", m["plugins"])
 	}
+	if !reflect.DeepEqual(m["scriptVersions"], map[string]any{}) {
+		t.Errorf("scriptVersions = %v, want none", m["scriptVersions"])
+	}
+}
+
+type versioned struct{ testPlugin }
+
+func (versioned) ScriptVersion() int { return 7 }
+
+// The version of the Vim script of a plugin (sdk.ScriptVersioner).
+func TestHelloScriptVersions(t *testing.T) {
+	table, err := Table(
+		versioned{testPlugin{"cmp", map[string]sdk.Handler{"complete": nop}}},
+		testPlugin{"skk", map[string]sdk.Handler{"toggle": nop}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := table["goda.hello"](context.Background(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := got.(map[string]any)["scriptVersions"]; !reflect.DeepEqual(v, map[string]any{"cmp": int64(7)}) {
+		t.Errorf("scriptVersions = %v", v)
+	}
 }
 
 // autoload/goda.vim must expect the protocol this module implements.
