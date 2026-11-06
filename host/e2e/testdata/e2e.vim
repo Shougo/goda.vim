@@ -149,6 +149,19 @@ sleep 100m
 " binary of another is refused, with how to build it again.
 call goda#register('test', $GODA_BIN, #{version: 4, module: 'example.com/test'})
 call s:rec('version_older', {-> goda#request('test', 'echo', 'x')})
+" With the plugin's build(), and its module in g:goda#workspace (built with
+" the plugins installed: no "go get").
+let s:workspace = tempname()
+call mkdir(s:workspace . '/autoload', 'p')
+call writefile(['function! goda_test#build() abort', 'endfunction'],
+      \ s:workspace . '/autoload/goda_test.vim')
+execute 'set runtimepath+=' . fnameescape(s:workspace)
+runtime autoload/goda_test.vim
+call writefile(['module example.com/test', '', 'go 1.26'], s:workspace . '/go.mod')
+let g:goda#workspace = [s:workspace]
+call goda#register('test', $GODA_BIN, #{version: 4, module: 'example.com/test'})
+call s:rec('version_workspace', {-> goda#request('test', 'echo', 'x')})
+unlet g:goda#workspace
 call goda#register('test', $GODA_BIN, #{version: 2})
 call s:rec('version_newer', {-> goda#request('test', 'echo', 'x')})
 call goda#register('other', $GODA_BIN2, #{version: 1})

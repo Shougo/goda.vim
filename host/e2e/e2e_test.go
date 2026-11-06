@@ -268,9 +268,10 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		"register_type":        "a binary path or a Funcref",
 		"register_opts":        "the options are a Dictionary",
 		// sdk.ScriptVersioner
-		"version_older": `was built for an older plugin "test" (version 3) than its Vim script (version 4): build the binary again, with the plugin updated in the Go module that builds it (go get -u example.com/test && go mod tidy)`,
-		"version_newer": `was built for a newer plugin "test" (version 3) than its Vim script (version 2): update the plugin, or build the binary again`,
-		"version_none":  `was built for an older plugin "other" than its Vim script (version 1)`,
+		"version_older":     `was built for an older plugin "test" (version 3) than its Vim script (version 4): update example.com/test in the Go module that builds the binary (go get -u example.com/test && go mod tidy) and build the binary again`,
+		"version_workspace": `was built for an older plugin "test" (version 3) than its Vim script (version 4): build the binary again (call goda_test#build())`,
+		"version_newer":     `was built for a newer plugin "test" (version 3) than its Vim script (version 2): update the plugin, or build the binary again`,
+		"version_none":      `was built for an older plugin "other" than its Vim script (version 1)`,
 	} {
 		if v := res[name]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, want) {
 			t.Errorf("%s = %q, want an exception mentioning %q", name, v, want)

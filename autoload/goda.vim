@@ -16,6 +16,7 @@
 " Must equal sdk.Protocol in the Go module (a test checks it). Bumped only when
 " an old binary and a new autoload can no longer work together.
 let s:protocol = 1
+let s:module = 'github.com/Shougo/goda.vim'
 
 let s:instances = {}  " binary path -> instance
 let s:routes = {}     " plugin name -> instance
@@ -179,8 +180,7 @@ function! s:nvim_probe(inst) abort
     let s:failed[a:inst.bin] = a:inst
     throw 'goda: ' . a:inst.bin . ' did not answer the handshake within ' . timeout . ' ms'
           \ . ' (g:goda#request_timeout). Is it a goda.vim plugin binary? If so, it was probably'
-          \ . ' built with an older goda.vim module: update it in the Go module that builds the'
-          \ . ' binary (go get -u github.com/Shougo/goda.vim) and build again.'
+          \ . ' built with an older goda.vim module: ' . s:rebuild(keys(s:starting), s:module) . '.'
   endif
   " It ended by itself: let its last stderr lines in, then say why.
   call jobwait([job], 200)
@@ -403,8 +403,8 @@ function! goda#start(bin) abort
       call s:throw_exited(inst, status)
     endif
     throw 'goda: handshake with ' . bin . ' failed: ' . msg
-          \ . "\n  The binary was probably built with an older goda.vim module. Update it in the Go module"
-          \ . " that builds the binary (go get -u github.com/Shougo/goda.vim) and build again."
+          \ . "\n  The binary was probably built with an older goda.vim module: "
+          \ . s:rebuild(keys(s:starting), s:module) . '.'
   endtry
   if has_key(s:failed, bin)
     call remove(s:failed, bin)
@@ -413,8 +413,7 @@ function! goda#start(bin) abort
   if theirs != s:protocol
     call s:kill(inst)
     throw 'goda: ' . bin . ' speaks protocol ' . theirs . ', this goda.vim expects ' . s:protocol
-          \ . '; update the goda.vim module in the Go module that builds the binary'
-          \ . ' (go get -u github.com/Shougo/goda.vim) and build again, or update the goda.vim plugin'
+          \ . '; ' . s:rebuild(keys(s:starting), s:module) . ', or update the goda.vim plugin'
   endif
   let plugins = sort(keys(hello.plugins))
   " Each plugin with the version of its Vim script: the binary is not of an
@@ -449,12 +448,35 @@ function! goda#start(bin) abort
   return copy(plugins)
 endfunction
 
+" What to do to build the binary of the plugins NAMES again, when it was
+" built with an older MODULE (a Go module path, or ''): with
+" g:goda#workspace, the build uses the plugins installed; otherwise MODULE
+" has to be updated in the Go module that builds the binary.
+function! s:rebuild(names, module) abort
+  let builds = map(filter(copy(a:names), 'exists("*goda_" . v:val . "#build")'),
+        \ '"call goda_" . v:val . "#build()"')
+  let how = 'build the binary again' . (empty(builds) ? '' : ' (' . join(builds, ', ') . ')')
+  if a:module ==# '' || s:in_workspace(a:module)
+    return how
+  endif
+  return 'update ' . a:module . ' in the Go module that builds the binary (go get -u '
+        \ . a:module . ' && go mod tidy) and ' . how
+endfunction
+
+" Is the Go module MODULE one of g:goda#workspace?
+function! s:in_workspace(module) abort
+  for dir in get(g:, 'goda#workspace', [])
+    if s:go_mod(dir)[0] ==# a:module
+      return 1
+    endif
+  endfor
+  return 0
+endfunction
+
 " Why the binary bin of plugin name of the version got does not go with its
 " Vim script (want: {version, module}), and what to do.
 function! s:version_error(bin, name, got, want) abort
-  let rebuild = 'build the binary again'
-        \ . (a:want.module !=# '' ? ', with the plugin updated in the Go module that builds it'
-        \   . ' (go get -u ' . a:want.module . ' && go mod tidy)' : '')
+  let rebuild = s:rebuild([a:name], a:want.module)
   if a:got > a:want.version
     return 'goda: ' . a:bin . ' was built for a newer plugin "' . a:name . '" (version '
           \ . a:got . ') than its Vim script (version ' . a:want.version . '):'
