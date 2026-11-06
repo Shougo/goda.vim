@@ -12,7 +12,6 @@ Writing a plugin	|goda-plugin|
 Versions		|goda-versions|
 AI			|goda-ai|
 FAQ			|goda-faq|
-Future work		|goda-future-work|
 
 ==============================================================================
 INTRODUCTION                                               *goda-introduction*
@@ -169,6 +168,30 @@ goda#log([{plugin}])
 		binary whose start failed.  Start here when something does
 		not work.
 
+                                                                *goda#build()*
+goda#build({opts})
+		Build the configuration module of a plugin into its binary,
+		as the build() of a plugin does (|goda_cmp#build()|): >
+		call goda#build(#{name: 'fi', dir: s:config_dir(),
+		      \ bin: s:default_bin()})
+		call goda#register('fi', function('s:start'), s:version)
+<		{opts} keys:
+		name	The plugin name.  The messages are "goda-{name}: ...".
+		dir	The configuration module.
+		bin	The binary.
+		"go mod tidy" runs in {dir} first (its failure matters only
+		when the build fails), the binary is built next to {bin},
+		and replaces it: the binary serving {name} is stopped first
+		when it is {bin} (the next request starts it again, once
+		|goda#register()| said how).  When the build fails, it
+		throws, and the old binary keeps running.
+
+		With |g:goda#workspace|, the modules of the plugins
+		installed that {dir} requires are used from their
+		directories: a go.work next to {bin} says so.  The Go side
+		of a plugin is then that of its Vim script installed, without
+		"go get -u" in {dir}.
+
 ==============================================================================
 VARIABLES                                                     *goda-variables*
 
@@ -194,6 +217,16 @@ g:goda#stop_timeout
 		Time in milliseconds |goda#stop()| waits for a binary to
 		stop by itself (its plugins' `Close` included) before it
 		kills it.  Default: 3000
+
+                                                            *g:goda#workspace*
+g:goda#workspace
+		The directories of the Go modules of the plugins installed,
+		which |goda#build()| uses (go.work) instead of the versions
+		the configuration requires.  goda-pm.vim sets it to those of
+		its plugins (those you develop in a local directory too).
+		Only the modules the configuration requires are used.  Set
+		it to [] to build with the versions of go.mod.
+		Default: []
 
 ==============================================================================
 WRITING A PLUGIN                                                 *goda-plugin*
@@ -295,6 +328,9 @@ goda.vim (or a plugin that bundles it), run in the module of the binary: >
 and build again.  The protocol version changes only when an old binary and a
 new Vim script can no longer work together.
 
+With |g:goda#workspace| (goda-pm.vim sets it), |goda#build()| builds with
+the plugins installed: after updating them, build again, without "go get".
+
 ==============================================================================
 AI                                                                   *goda-ai*
 
@@ -316,20 +352,6 @@ A: Check |goda#plugins()| and |goda#log()|.
 Q: When should a plugin call |goda#start()|?
 A: It need not: |goda#register()| at the top of its autoload script, and
    the first request starts the binary.
-
-==============================================================================
-FUTURE WORK                                               *goda-future-work*
-
-The binary of a plugin built from the sources of the plugin installed.
-The Go side of a plugin comes from the version its configuration module
-requires (go.mod), and its Vim script from the plugin installed: updating
-the plugin needs "go get -u" in each configuration module too, or the
-binary is refused (|goda#register()| with a version) or fails.  A plugin
-manager that installs the plugins (goda-pm.vim) can write a go.work that
-uses their directories (those of a local plugin in development too), and a
-common build of goda.vim (goda#build(), which the build() of each plugin
-calls) builds with it: the Go side is then always that of the Vim script
-installed, without "go get -u".
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

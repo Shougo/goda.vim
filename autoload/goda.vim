@@ -555,6 +555,159 @@ function! goda#notify(plugin, method, ...) abort
 endfunction
 
 " ---------------------------------------------------------------------------
+" Building a plugin binary
+
+" Build the configuration module of a plugin into its binary: OPTS.name is
+" the plugin, OPTS.dir the module, OPTS.bin the binary. "go mod tidy" runs
+" first (its failure only matters when the build fails), the binary is built
+" next to the old one, and replaces it: the running one is stopped first
+" (it is started again by the next request, once goda#register() said how).
+" When the build fails, the old binary keeps running.
+"
+" With g:goda#workspace (the plugins installed: goda-pm.vim sets it), the
+" modules of the plugins the configuration requires come from there, not
+" from the versions its go.mod says: the Go side is that of the Vim script
+" installed.
+function! goda#build(opts) abort
+  let name = a:opts.name
+  let label = 'goda-' . name
+  let dir = a:opts.dir
+  let bin = a:opts.bin
+  if !isdirectory(dir)
+    throw label . ': no config directory: ' . dir
+  endif
+  call mkdir(fnamemodify(bin, ':h'), 'p')
+
+  " One command, no cd and no &&: those differ between shells (cmd.exe,
+  " PowerShell, sh). "go -C" runs go in that directory.
+  let tidy = system('go -C ' . shellescape(dir) . ' mod tidy')
+  let tidy_failed = v:shell_error
+
+  let work = s:write_go_work(dir, fnamemodify(bin, ':h') . '/go.work')
+  let tmp = bin . '.new' . (has('win32') ? '.exe' : '')
+  let gowork = exists('$GOWORK') ? $GOWORK : v:null
+  try
+    if work !=# ''
+      let $GOWORK = work
+    endif
+    let out = system('go -C ' . shellescape(dir) . ' build -o ' . shellescape(tmp) . ' .')
+    let failed = v:shell_error
+  finally
+    if gowork is v:null
+      unlet $GOWORK
+    else
+      let $GOWORK = gowork
+    endif
+  endtry
+  if failed
+    call delete(tmp)
+    throw label . ': go build failed:' . "\n" . out
+          \ . (tidy_failed ? "\n" . 'go mod tidy failed too:' . "\n" . tidy : '')
+  endif
+
+  if fnamemodify(get(goda#plugins(), name, ''), ':p') ==# fnamemodify(bin, ':p')
+    call goda#stop(name)
+  endif
+  if rename(tmp, bin) != 0
+    throw label . ': cannot replace ' . bin
+  endif
+  echomsg label . ': built ' . bin
+endfunction
+
+" The module path and the go version of the module DIR: ['', ''] without
+" its go.mod.
+function! s:go_mod(dir) abort
+  let file = a:dir . '/go.mod'
+  if !filereadable(file)
+    return ['', '']
+  endif
+  let lines = readfile(file)
+  let module = matchstr(get(filter(copy(lines), 'v:val =~# "^module\\s"'), 0, ''),
+        \ '^module\s\+"\?\zs[^" \t]\+')
+  let go = matchstr(get(filter(copy(lines), 'v:val =~# "^go\\s"'), 0, ''),
+        \ '^go\s\+\zs\S\+')
+  return [module, go]
+endfunction
+
+" The modules the module DIR requires (its go.mod, tidied: all of them).
+function! s:go_requires(dir) abort
+  let requires = {}
+  let file = a:dir . '/go.mod'
+  if !filereadable(file)
+    return requires
+  endif
+  let in_require = 0
+  for line in readfile(file)
+    let line = substitute(line, '//.*', '', '')
+    if line =~# '^require\s*($'
+      let in_require = 1
+      continue
+    elseif in_require && line =~# '^\s*)'
+      let in_require = 0
+      continue
+    endif
+    let m = matchlist(line, in_require
+          \ ? '^\s*"\?\([^" \t]\+\)"\?\s\+v'
+          \ : '^require\s\+"\?\([^" \t]\+\)"\?\s\+v')
+    if !empty(m)
+      let requires[m[1]] = 1
+    endif
+  endfor
+  return requires
+endfunction
+
+" Is the go version A older than B?
+function! s:go_older(a, b) abort
+  let a = map(split(matchstr(a:a, '^[0-9.]\+'), '\.'), 'str2nr(v:val)')
+  let b = map(split(matchstr(a:b, '^[0-9.]\+'), '\.'), 'str2nr(v:val)')
+  for i in range(max([len(a), len(b)]))
+    let x = get(a, i, 0)
+    let y = get(b, i, 0)
+    if x != y
+      return x < y
+    endif
+  endfor
+  return 0
+endfunction
+
+" Write the go.work FILE of the module DIR and the modules of
+" g:goda#workspace it requires, and give its path: '' when it requires none.
+function! s:write_go_work(dir, file) abort
+  call delete(a:file)
+  call delete(a:file . '.sum')
+  let requires = s:go_requires(a:dir)
+  let go = s:go_mod(a:dir)[1]
+  let uses = []
+  let seen = {}
+  for module_dir in get(g:, 'goda#workspace', [])
+    let [module, module_go] = s:go_mod(module_dir)
+    if module ==# '' || !has_key(requires, module) || has_key(seen, module)
+      continue
+    endif
+    let seen[module] = 1
+    call add(uses, module_dir)
+    if go ==# '' || s:go_older(go, module_go)
+      let go = module_go
+    endif
+  endfor
+  if empty(uses)
+    return ''
+  endif
+  let lines = ['// Written by goda#build(): the plugins installed (g:goda#workspace).']
+  if go !=# ''
+    call add(lines, 'go ' . go)
+  endif
+  call add(lines, 'use (')
+  for d in [a:dir] + uses
+    call add(lines, "\t" . json_encode(fnamemodify(d, ':p')
+          \ ->substitute('[/\\]$', '', '')->substitute('\\', '/', 'g')))
+  endfor
+  call add(lines, ')')
+  call writefile(lines, a:file)
+  return a:file
+endfunction
+
+" ---------------------------------------------------------------------------
 " Helpers called BY the plugin binary on the Vim transport (host/vim). Vim
 " reports a failed call as the bare string "ERROR", which cannot be told apart
 " from a function returning "ERROR", so errors are caught here and answered as
