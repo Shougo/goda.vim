@@ -615,7 +615,11 @@ function! goda#build(opts) abort
   " above it).
   let [tidy, tidy_failed] = s:go(dir, 'mod tidy', 'off')
 
-  let work = s:write_go_work(dir, fnamemodify(bin, ':h') . '/go.work')
+  try
+    let work = s:write_go_work(dir, fnamemodify(bin, ':h') . '/go.work')
+  catch
+    throw label . ': ' . v:exception
+  endtry
   let tmp = bin . '.new' . (has('win32') ? '.exe' : '')
   let [out, failed] = s:go(dir, 'build -o ' . shellescape(tmp) . ' .', work ==# '' ? v:null : work)
   if failed
@@ -651,18 +655,6 @@ function! s:go(dir, args, gowork) abort
       let $GOWORK = saved
     endif
   endtry
-endfunction
-
-" The directory of the module DIR as go sees it, which the go.work has to
-" use: go resolves the symbolic links (/var is /private/var on macOS) and the
-" short names (RUNNER~1 on MS-Windows) of the current directory.
-function! s:go_module_dir(dir) abort
-  let [out, failed] = s:go(a:dir, 'env GOMOD', 'off')
-  let gomod = trim(out)
-  if failed || gomod ==# '' || gomod ==# '/dev/null' || gomod ==# 'NUL'
-    return fnamemodify(a:dir, ':p')
-  endif
-  return fnamemodify(gomod, ':h')
 endfunction
 
 " The module path and the go version of the module DIR: ['', ''] without
@@ -749,12 +741,20 @@ function! s:write_go_work(dir, file) abort
     call add(lines, 'go ' . go)
   endif
   call add(lines, 'use (')
-  for d in [s:go_module_dir(a:dir)] + uses
+  for d in uses
     call add(lines, "\t" . json_encode(fnamemodify(d, ':p')
           \ ->substitute('[/\\]$', '', '')->substitute('\\', '/', 'g')))
   endfor
   call add(lines, ')')
   call writefile(lines, a:file)
+  " The module itself is added by go: the directory as go sees it, which
+  " the build compares with the current directory (go resolves the symbolic
+  " links, /var is /private/var on macOS, and the short names of
+  " MS-Windows).
+  let [out, failed] = s:go(a:dir, 'work use .', a:file)
+  if failed
+    throw 'go work use failed:' . "\n" . out
+  endif
   return a:file
 endfunction
 

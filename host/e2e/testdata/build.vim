@@ -33,7 +33,7 @@ endtry
 call s:put('gowork_restored', $GOWORK)
 let s:work = readfile($GODA_BUILD_DIR . '/bin/go.work')
 call s:put('go_version', filter(copy(s:work), 'v:val =~# "^go "'))
-call s:put('uses', len(filter(copy(s:work), 'v:val =~# "^\t\""')))
+call s:put('uses', len(filter(copy(s:work), 'v:val =~# "^\t"')))
 call s:put('other_used', len(filter(copy(s:work), 'v:val =~# "other"')))
 
 call writefile(s:out, $GODA_OUT)
