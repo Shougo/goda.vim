@@ -44,10 +44,27 @@ Requirements:
   later) downloads Go 1.26 by itself when it builds, unless $GOTOOLCHAIN is
   "local".
 
-Install goda.vim with your plugin manager.  A plugin binary is built by the
-user or by the plugin that ships it (see |goda_cmp#build()|), and started
-with |goda#start()|, or by the first request once |goda#register()| said
-how.
+Install goda.vim with your plugin manager.  goda-pm.vim, the plugin manager
+on goda.vim (the successor of dpp.vim), is the recommended one: its TOML
+files are those of dpp.vim. >toml
+	[[plugins]]
+	repo = 'Shougo/goda.vim'
+
+	[[plugins]]
+	repo = 'Shougo/goda-fi.vim'
+	depends = 'goda.vim'
+	# Loaded by the first call of a goda_fi#...() function.
+	lazy = true
+<
+https://github.com/Shougo/goda-pm.vim
+
+goda.vim has no plugin/ script: it is loaded by the first call of a goda#...()
+function, so it costs nothing at startup.  With goda-pm.vim, do not make it
+lazy: goda-pm.vim uses it to make its state and to install the plugins.
+
+A plugin binary is built by the user or by the plugin that ships it (see
+|goda_cmp#build()|), and started with |goda#start()|, or by the first
+request once |goda#register()| said how.
 
 ==============================================================================
 FUNCTIONS                                                     *goda-functions*

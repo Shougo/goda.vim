@@ -25,6 +25,29 @@ that are linked into the binary at build time.
 Do not name a plugin binary `goda`: `go install github.com/loov/goda@latest`
 (an unrelated tool) installs that name.
 
+## Install
+
+Install goda.vim with a plugin manager.
+[goda-pm.vim](https://github.com/Shougo/goda-pm.vim), the plugin manager on
+goda.vim (the successor of dpp.vim), is the recommended one: its TOML files
+are those of dpp.vim.
+
+```toml
+[[plugins]]
+repo = 'Shougo/goda.vim'
+
+[[plugins]]
+repo = 'Shougo/goda-fi.vim'
+depends = 'goda.vim'
+# Loaded by the first call of a goda_fi#...() function.
+lazy = true
+```
+
+goda.vim itself has no `plugin/` script: it is loaded by the first call of a
+`goda#...()` function, so it costs nothing at startup. With goda-pm.vim, do
+not make it lazy (goda-pm.vim uses it to make its state and to install the
+plugins).
+
 ## Try it
 
 This builds and calls a plugin of ten lines. You need Go 1.26 or newer and
