@@ -240,9 +240,11 @@ function! s:throw_exited(inst, status) abort
 endfunction
 
 " Blocking call of a method of one binary, by its full name ('plugin.method').
-function! s:rpc(inst, name, args) abort
+" Request NAME of the binary of INST. With WAIT, no g:goda#request_timeout:
+" as long as it takes.
+function! s:rpc(inst, name, args, wait = 0) abort
   if has('nvim')
-    if !s:nvim_timeout()
+    if !s:nvim_timeout() || a:wait
       return call('rpcrequest', [a:inst.chan, a:name] + a:args)
     endif
     let timeout = get(g:, 'goda#request_timeout', 10000)
@@ -255,7 +257,10 @@ function! s:rpc(inst, name, args) abort
     endif
     throw r
   endif
-  let r = ch_evalexpr(job_getchannel(a:inst.job), [a:name] + a:args)
+  " (Vim has no timeout that means "no limit": about 24 days.)
+  let r = a:wait
+        \ ? ch_evalexpr(job_getchannel(a:inst.job), [a:name] + a:args, #{timeout: 0x7fffffff})
+        \ : ch_evalexpr(job_getchannel(a:inst.job), [a:name] + a:args)
   if type(r) != v:t_dict
     throw 'goda: no answer to ' . a:name . ' (timed out, or the plugin exited)'
   endif
@@ -563,6 +568,12 @@ endfunction
 " Blocking request to a plugin's method. Throws on failure.
 function! goda#request(plugin, method, ...) abort
   return s:rpc(s:route(a:plugin), a:plugin . '.' . a:method, a:000)
+endfunction
+
+" Blocking request without g:goda#request_timeout: for a call that waits for
+" the user (an input() of the plugin, say). Throws on failure.
+function! goda#request_wait(plugin, method, ...) abort
+  return s:rpc(s:route(a:plugin), a:plugin . '.' . a:method, a:000, 1)
 endfunction
 
 " Fire-and-forget notification to a plugin's method.

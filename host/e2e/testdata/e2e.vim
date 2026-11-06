@@ -67,6 +67,8 @@ call s:rec('unknown_plugin', {-> goda#request('nope', 'echo')})
 " Too late: Vim gives up after 500 ms, and the plugin must stay usable.
 call s:rec('slow', {-> goda#request('test', 'slow')})
 call s:rec('after_slow', {-> goda#request('test', 'echo', 'still alive')})
+" Without the timeout: as long as it takes.
+call s:rec('slow_wait', {-> goda#request_wait('test', 'slow')})
 
 " A notification that makes a request, sent while the editor waits for the
 " answer of another one: both answered (Neovim: in the order it wants).

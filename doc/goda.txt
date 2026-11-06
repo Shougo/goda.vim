@@ -143,6 +143,15 @@ goda#request({plugin}, {method} [, {arg}...])
 		|g:goda#request_timeout|.  Starts {plugin} first when it is
 		not running and |goda#register()| said how.
 
+                                                         *goda#request_wait()*
+goda#request_wait({plugin}, {method} [, {arg}...])
+		As |goda#request()|, without |g:goda#request_timeout|: it
+		waits as long as the call takes.  For a call that may wait
+		for the user, as an action that asks with input() or
+		confirm(): the time the user takes is that of the call.
+		The editor does not respond meanwhile but to what the plugin
+		asks: use it only for what the user started.
+
                                                                *goda#notify()*
 goda#notify({plugin}, {method} [, {arg}...])
 		Call {method} of {plugin} without waiting for an answer.
@@ -211,6 +220,8 @@ g:goda#request_timeout
 		A plugin that may take long should be called with
 		|goda#notify()| and answer by calling back into the editor,
 		or bound its own work with a deadline (`sdk.Guard`).
+		A call that waits for the user is called with
+		|goda#request_wait()|.
 
                                                          *g:goda#stop_timeout*
 g:goda#stop_timeout

@@ -298,6 +298,9 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 	} else if v := res["slow"]; v != `"late"` {
 		t.Errorf("slow = %q, want \"late\"", v)
 	}
+	if v := res["slow_wait"]; v != `"late"` {
+		t.Errorf("slow_wait = %q, want \"late\"", v)
+	}
 	// A binary that never answers the handshake does not hang the editor,
 	// an older Neovim included (where it is tried on a plain job first).
 	silentWant := "no answer"
