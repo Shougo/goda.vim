@@ -611,27 +611,13 @@ function! goda#build(opts) abort
   endif
   call mkdir(fnamemodify(bin, ':h'), 'p')
 
-  " One command, no cd and no &&: those differ between shells (cmd.exe,
-  " PowerShell, sh). "go -C" runs go in that directory.
-  let tidy = system('go -C ' . shellescape(dir) . ' mod tidy')
-  let tidy_failed = v:shell_error
+  " The module itself: not of a go.work of the user ($GOWORK, or one
+  " above it).
+  let [tidy, tidy_failed] = s:go(dir, 'mod tidy', 'off')
 
   let work = s:write_go_work(dir, fnamemodify(bin, ':h') . '/go.work')
   let tmp = bin . '.new' . (has('win32') ? '.exe' : '')
-  let gowork = exists('$GOWORK') ? $GOWORK : v:null
-  try
-    if work !=# ''
-      let $GOWORK = work
-    endif
-    let out = system('go -C ' . shellescape(dir) . ' build -o ' . shellescape(tmp) . ' .')
-    let failed = v:shell_error
-  finally
-    if gowork is v:null
-      unlet $GOWORK
-    else
-      let $GOWORK = gowork
-    endif
-  endtry
+  let [out, failed] = s:go(dir, 'build -o ' . shellescape(tmp) . ' .', work ==# '' ? v:null : work)
   if failed
     call delete(tmp)
     throw label . ': go build failed:' . "\n" . out
@@ -645,6 +631,38 @@ function! goda#build(opts) abort
     throw label . ': cannot replace ' . bin
   endif
   echomsg label . ': built ' . bin
+endfunction
+
+" Run go ARGS in DIR, with $GOWORK set to GOWORK (unless it is v:null):
+" [its output, whether it failed]. One command, no cd and no &&: those
+" differ between shells (cmd.exe, PowerShell, sh); "go -C" runs go in DIR.
+function! s:go(dir, args, gowork) abort
+  let saved = exists('$GOWORK') ? $GOWORK : v:null
+  try
+    if a:gowork isnot v:null
+      let $GOWORK = a:gowork
+    endif
+    let out = system('go -C ' . shellescape(a:dir) . ' ' . a:args)
+    return [out, v:shell_error]
+  finally
+    if saved is v:null
+      unlet! $GOWORK
+    else
+      let $GOWORK = saved
+    endif
+  endtry
+endfunction
+
+" The directory of the module DIR as go sees it, which the go.work has to
+" use: go resolves the symbolic links (/var is /private/var on macOS) and the
+" short names (RUNNER~1 on MS-Windows) of the current directory.
+function! s:go_module_dir(dir) abort
+  let [out, failed] = s:go(a:dir, 'env GOMOD', 'off')
+  let gomod = trim(out)
+  if failed || gomod ==# '' || gomod ==# '/dev/null' || gomod ==# 'NUL'
+    return fnamemodify(a:dir, ':p')
+  endif
+  return fnamemodify(gomod, ':h')
 endfunction
 
 " The module path and the go version of the module DIR: ['', ''] without
@@ -731,7 +749,7 @@ function! s:write_go_work(dir, file) abort
     call add(lines, 'go ' . go)
   endif
   call add(lines, 'use (')
-  for d in [a:dir] + uses
+  for d in [s:go_module_dir(a:dir)] + uses
     call add(lines, "\t" . json_encode(fnamemodify(d, ':p')
           \ ->substitute('[/\\]$', '', '')->substitute('\\', '/', 'g')))
   endfor
