@@ -86,6 +86,13 @@ function! s:kill(inst, timeout = 0) abort
         call chanclose(a:inst.chan, 'rpc')
       else
         call ch_close_in(a:inst.job)
+        if !has('win32')
+          " The binaries started later have the input of this one too (Vim
+          " leaves its pipes open in the jobs): it may not see the end of
+          " its input until they exit. SIGTERM stops it as well, after the
+          " Close of its plugins (on MS-Windows, job_stop() kills it).
+          call job_stop(a:inst.job, 'term')
+        endif
       endif
       call s:wait_exit(a:inst, a:timeout)
     catch

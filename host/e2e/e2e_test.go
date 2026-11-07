@@ -179,6 +179,7 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		"notify_request_inner": `["inner"]`,
 		"after_late_answer":    `["after the late answer"]`,
 		"stopped":              "0",
+		"stop_first_fast":      "1",
 		// goda#register()
 		"register_path":          `"pong"`,
 		"register_func":          `["started"]`,

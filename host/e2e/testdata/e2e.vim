@@ -105,6 +105,13 @@ call s:add("other_running\t" . goda#is_running('other'))
 call s:rec('other_after_stop', {-> goda#request('other', 'ping')})
 call s:rec('test_after_other_stop', {-> goda#request('test', 'echo', 'alive')})
 
+" A binary stops at once with another started after it (which has its input
+" too in Vim).
+call goda#start($GODA_BIN2)
+let s:t = reltime()
+call goda#stop('test')
+call s:add("stop_first_fast\t" . (reltimefloat(reltime(s:t)) < 1.0))
+
 call goda#stop()
 sleep 100m
 call s:add("stopped\t" . goda#is_running())
