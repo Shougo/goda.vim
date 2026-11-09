@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"strings"
@@ -13,7 +14,14 @@ import (
 
 	"github.com/Shougo/goda.vim/host"
 	"github.com/Shougo/goda.vim/sdk"
+	"github.com/Shougo/goda.vim/sdk/vimscript"
 )
+
+//go:embed script.vim
+var scriptSrc []byte
+
+// script: its functions are called from the binary, nothing in 'runtimepath'.
+var script = vimscript.New("autoload/godatest/script.vim", scriptSrc)
 
 type testPlugin struct{}
 
@@ -113,6 +121,13 @@ func (testPlugin) Handlers() map[string]sdk.Handler {
 			return "late", nil
 		},
 
+		// The embedded Vim script: sourced, then called (twice).
+		"script": func(ctx context.Context, h sdk.Host, _ []any) (any, error) {
+			if _, err := script.Call(ctx, h, "godatest#script#hello", "a"); err != nil {
+				return nil, err
+			}
+			return script.Call(ctx, h, "godatest#script#hello", "goda")
+		},
 		// A struct argument: its json tags are what Vim sees.
 		"struct": func(ctx context.Context, h sdk.Host, _ []any) (any, error) {
 			type item struct {

@@ -241,6 +241,9 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 	if !strings.Contains(res["notify_log"], "[notify] goda_no_such_function: ") {
 		t.Errorf("notify_log = %s", res["notify_log"])
 	}
+	if res["script"] != `"hello, goda"` || res["script_file"] != `"script.vim"` {
+		t.Errorf("the embedded Vim script: %s, %s", res["script"], res["script_file"])
+	}
 	if res["stdout"] != `"shout"` {
 		t.Errorf("a stray Println must not break the protocol, got %s", res["stdout"])
 	}

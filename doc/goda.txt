@@ -229,6 +229,13 @@ g:goda#stop_timeout
 		stop by itself (its plugins' `Close` included) before it
 		kills it.  Default: 3000
 
+                                                           *g:goda#vimscripts*
+g:goda#vimscripts
+		The Vim scripts embedded in the binaries and sourced
+		(|goda-vimscript|): their files, by their autoload paths
+		("autoload/myplugin/kind/file.vim").  To read one, or to
+		source it again.  Set by the binaries.
+
                                                             *g:goda#workspace*
 g:goda#workspace
 		The directories of the Go modules of the plugins installed,
@@ -316,6 +323,24 @@ per line on stdin: >
 	echo '{"method":"goda.plugins"}' | ./hello --transport=jsonl
 <
 Calls into the editor fail in this mode.
+
+                                                              *goda-vimscript*
+The Vim script a binary calls (that of an extension, say) can be embedded in
+it with the package `sdk/vimscript`: the file is in the Go package
+(go:embed), written in the cache directory at the path of an autoload script,
+and sourced before the first call of its functions.  It needs nothing in
+'runtimepath', and it is always the Vim script of the Go code built with it.
+>go
+	//go:embed file.vim
+	var src []byte
+
+	var script = vimscript.New("autoload/myplugin/kind/file.vim", src)
+
+	_, err := script.Call(ctx, h, "myplugin#kind#file#open", targets)
+<
+The functions of the script are named as those of its autoload path
+(myplugin#kind#file#*), and may call its script-local functions.  Where the
+scripts are is in |g:goda#vimscripts|.
 
                                                             *goda-command-line*
 Vim starts a binary as `{bin} --transport=vim`, Neovim as
