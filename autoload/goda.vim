@@ -628,7 +628,8 @@ function! goda#build(opts) abort
     throw label . ': ' . v:exception
   endtry
   let tmp = bin . '.new' . (has('win32') ? '.exe' : '')
-  let [out, failed] = s:go(dir, 'build -o ' . shellescape(tmp) . ' .', work ==# '' ? v:null : work)
+  " Without the workspace, not of a go.work of the user either.
+  let [out, failed] = s:go(dir, 'build -o ' . shellescape(tmp) . ' .', work ==# '' ? 'off' : work)
   if failed
     call delete(tmp)
     throw label . ': go build failed:' . "\n" . out

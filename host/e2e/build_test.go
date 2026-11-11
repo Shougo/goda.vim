@@ -83,6 +83,8 @@ func TestBuild(t *testing.T) {
 			want := map[string]string{
 				"no_workspace":     "failed",
 				"no_workspace_bin": "0",
+				"user_go_work":     "failed",
+				"user_go_work_bin": "0",
 				"workspace":        "workspace",
 				"gowork_restored":  "kept",
 				"go_version":       "['go 1.22.1']",

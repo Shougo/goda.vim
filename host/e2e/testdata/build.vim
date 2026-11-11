@@ -21,6 +21,20 @@ catch
 endtry
 call s:put('no_workspace_bin', filereadable(s:bin))
 
+" Without the workspace, a go.work of the user above the configuration is
+" not used either: it would give example.com/godalib.
+call writefile(['go 1.22.1', 'use (', "\t./cfg", "\t./lib", ')'], $GODA_BUILD_DIR . '/go.work')
+unlet $GOWORK
+try
+  call goda#build(s:opts)
+  call s:put('user_go_work', trim(system(shellescape(s:bin))))
+catch
+  call s:put('user_go_work', v:exception =~# 'goda-cfg: go build failed' ? 'failed' : v:exception)
+endtry
+call s:put('user_go_work_bin', filereadable(s:bin))
+call delete($GODA_BUILD_DIR . '/go.work')
+let $GOWORK = 'kept'
+
 " The workspace: the module the configuration requires is used; the other
 " one (whose go.mod cannot be resolved) is not.
 let g:goda#workspace = [$GODA_BUILD_DIR . '/other', $GODA_BUILD_DIR . '/lib', $GODA_BUILD_DIR . '/lib2']
