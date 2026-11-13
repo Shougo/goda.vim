@@ -215,10 +215,11 @@ call goda#register('test', s:auto_bin, #{version: 4, module: 'example.com/test',
 call s:rec('auto_build_version', {-> goda#request('test', 'echo', 'x')})
 call s:rec('auto_build_version_again', {-> goda#request('test', 'echo', 'x')})
 call s:add("auto_build_version_builds\t" . s:builds)
-" Not with g:goda#auto_build 0.
-call delete(s:auto_bin)
+" Not with g:goda#auto_build 0. (A binary that is not there: on Windows,
+" that refused above cannot be deleted while it is still exiting.)
+let s:no_bin = tempname() . (has('win32') ? '.exe' : '')
 let g:goda#auto_build = 0
-call goda#register('test', s:auto_bin, #{version: 3, build: function('s:build_copy'), bin: s:auto_bin})
+call goda#register('test', s:no_bin, #{version: 3, build: function('s:build_copy'), bin: s:no_bin})
 call s:rec('auto_build_off', {-> goda#request('test', 'echo', 'x')})
 call s:add("auto_build_off_builds\t" . s:builds)
 unlet g:goda#auto_build
