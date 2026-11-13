@@ -181,13 +181,19 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		"stopped":              "0",
 		"stop_first_fast":      "1",
 		// goda#register()
-		"register_path":          `"pong"`,
-		"register_func":          `["started"]`,
-		"register_again":         `["again"]`,
-		"register_started":       "2",
-		"register_ghost_tries":   "1",
-		"register_ghost_retries": "2",
-		"version_same":           `["v3"]`,
+		"register_path":              `"pong"`,
+		"register_func":              `["started"]`,
+		"register_again":             `["again"]`,
+		"register_started":           "2",
+		"register_ghost_tries":       "1",
+		"register_ghost_retries":     "2",
+		"auto_build_none":            `["built"]`,
+		"auto_build_none_builds":     "1",
+		"auto_build_protocol":        `["rebuilt"]`,
+		"auto_build_protocol_builds": "2",
+		"auto_build_version_builds":  "3",
+		"auto_build_off_builds":      "3",
+		"version_same":               `["v3"]`,
 	}
 	for name, w := range want {
 		if res[name] != w {
@@ -264,13 +270,17 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		}
 	}
 	for name, want := range map[string]string{
-		"register_ghost":       `did not start it`,
-		"register_ghost_again": `could not be started`,
-		"register_ghost_retry": `did not start it`,
-		"register_broken":      `starting plugin "broken" failed: Vim`,
-		"register_reserved":    "reserved",
-		"register_type":        "a binary path or a Funcref",
-		"register_opts":        "the options are a Dictionary",
+		"register_ghost":           `did not start it`,
+		"register_ghost_again":     `could not be started`,
+		"register_ghost_retry":     `did not start it`,
+		"register_broken":          `starting plugin "broken" failed: Vim`,
+		"register_reserved":        "reserved",
+		"register_type":            "a binary path or a Funcref",
+		"register_opts":            "the options are a Dictionary",
+		"auto_build_version":       "built for an older plugin",
+		"auto_build_version_again": "could not be started",
+		"auto_build_off":           "not executable",
+		"auto_build_opts":          `"build" is a Funcref`,
 		// sdk.ScriptVersioner
 		"version_older":     `was built for an older plugin "test" (version 3) than its Vim script (version 4): update example.com/test in the Go module that builds the binary (go get -u example.com/test && go mod tidy) and build the binary again`,
 		"version_workspace": `was built for an older plugin "test" (version 3) than its Vim script (version 4): build the binary again (call goda_test#build())`,

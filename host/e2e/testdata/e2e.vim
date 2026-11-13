@@ -181,5 +181,48 @@ call goda#register('test', $GODA_BIN, #{version: 3})
 call s:rec('version_same', {-> goda#request('test', 'echo', 'v3')})
 call s:rec('register_opts', {-> goda#register('test', $GODA_BIN, 1)})
 call goda#stop()
+sleep 100m
+
+" "build" of goda#register(): the binary is built when there is none, and
+" once again when goda#start() refuses it for its version. (Built here: a
+" copy of $GODA_BIN.)
+let s:builds = 0
+let s:auto_bin = tempname() . (has('win32') ? '.exe' : '')
+function! s:build_copy(from = $GODA_BIN) abort
+  let s:builds += 1
+  " (Renamed over it, as goda#build() does: the binary refused may still
+  " be running.)
+  call writefile(readblob(a:from), s:auto_bin . '.new')
+  call setfperm(s:auto_bin . '.new', 'rwxr-xr-x')
+  call rename(s:auto_bin . '.new', s:auto_bin)
+endfunction
+call goda#register('test', s:auto_bin, #{version: 3, build: function('s:build_copy'), bin: s:auto_bin})
+call s:rec('auto_build_none', {-> goda#request('test', 'echo', 'built')})
+call s:add("auto_build_none_builds\t" . s:builds)
+call goda#stop()
+sleep 100m
+" Of an older protocol: built again.
+call writefile(readblob($GODA_BIN_OLD), s:auto_bin)
+call goda#register('test', s:auto_bin, #{version: 3, build: function('s:build_copy'), bin: s:auto_bin})
+call s:rec('auto_build_protocol', {-> goda#request('test', 'echo', 'rebuilt')})
+call s:add("auto_build_protocol_builds\t" . s:builds)
+call goda#stop()
+sleep 100m
+" Of another version of the Vim script, which the build does not change:
+" built once, and the start fails as it did.
+call goda#register('test', s:auto_bin, #{version: 4, module: 'example.com/test',
+      \ build: function('s:build_copy'), bin: s:auto_bin})
+call s:rec('auto_build_version', {-> goda#request('test', 'echo', 'x')})
+call s:rec('auto_build_version_again', {-> goda#request('test', 'echo', 'x')})
+call s:add("auto_build_version_builds\t" . s:builds)
+" Not with g:goda#auto_build 0.
+call delete(s:auto_bin)
+let g:goda#auto_build = 0
+call goda#register('test', s:auto_bin, #{version: 3, build: function('s:build_copy'), bin: s:auto_bin})
+call s:rec('auto_build_off', {-> goda#request('test', 'echo', 'x')})
+call s:add("auto_build_off_builds\t" . s:builds)
+unlet g:goda#auto_build
+call s:rec('auto_build_opts', {-> goda#register('test', $GODA_BIN, #{build: 1})})
+call goda#stop()
 
 qa!

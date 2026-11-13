@@ -120,6 +120,15 @@ goda#register({plugin}, {starter} [, {opts}])
 				plugin updated, for a newer binary).
 		  module	The Go module of the plugin, for that
 				message ("go get -u {module}").
+		  build		A |Funcref| that builds its binary, "bin"
+				(as |goda#build()| does): it is built when
+				it is started and there is none, and once
+				again when |goda#start()| refuses it for its
+				version (that of the Vim script, or of the
+				protocol).  A plugin gives it for the binary
+				it builds, not for one the user gives.  Not
+				with |g:goda#auto_build| 0.
+		  bin		The binary "build" builds.
 		A plugin bumps its version when its Vim script and its
 		binary no longer work together: its users are told to
 		build again instead of meeting an unknown function. >vim
@@ -203,6 +212,13 @@ goda#build({opts})
 
 ==============================================================================
 VARIABLES                                                     *goda-variables*
+
+                                                         *g:goda#auto_build*
+g:goda#auto_build
+		0: a binary is not built when it is started: with no binary,
+		or of another version, the start fails and says to build it
+		(see "build" of |goda#register()|).
+		Default: 1
 
                                                       *g:goda#request_timeout*
 g:goda#request_timeout

@@ -24,6 +24,8 @@ let s:failed = {}     " binary path -> instance whose start failed (for goda#log
 let s:notify_errors = []  " errors of functions plugins called with Notify
 let s:starters = {}   " plugin name -> binary path or Funcref (goda#register())
 let s:start_failed = {}  " plugin name -> why its start by goda#register() failed
+let s:builds = get(s:, 'builds', {})  " plugin name -> {build, bin} (goda#register())
+let s:mismatched = ''  " the binary goda#start() refused last for its versions
 let s:starting = {}  " plugin names being started (a starter that asks for its plugin)
 let s:script_versions = get(s:, 'script_versions', {})  " plugin name -> {version, module} (goda#register())
 let s:stopping = 0   " goda#stop() is running
@@ -305,13 +307,25 @@ function! s:autostart(plugin) abort
           \ . ' again to try again. It failed with: ' . s:start_failed[a:plugin]
   endif
   let Starter = s:starters[a:plugin]
+  let build = get(g:, 'goda#auto_build', 1) ? get(s:builds, a:plugin, {}) : {}
   let s:starting[a:plugin] = 1
   try
-    if type(Starter) == v:t_func
-      call Starter()
-    else
-      call goda#start(Starter)
+    " The binary is built first when there is none, and again (once) when
+    " goda#start() refused it for the versions of its Vim script or of the
+    " protocol (built before an update).
+    if !empty(build) && !executable(build.bin)
+      call s:auto_build(a:plugin, build, 'there is no binary')
     endif
+    let s:mismatched = ''
+    try
+      call s:start_with(Starter)
+    catch
+      if empty(build) || s:mismatched ==# ''
+        throw v:exception
+      endif
+      call s:auto_build(a:plugin, build, 'the binary is of another version')
+      call s:start_with(Starter)
+    endtry
     if !goda#is_running(a:plugin)
       throw 'goda: starting plugin "' . a:plugin . '" did not start it ('
             \ . (type(Starter) == v:t_func ? string(Starter) : Starter) . ' does not serve it)'
@@ -324,6 +338,21 @@ function! s:autostart(plugin) abort
   finally
     call remove(s:starting, a:plugin)
   endtry
+endfunction
+
+function! s:start_with(Starter) abort
+  if type(a:Starter) == v:t_func
+    call a:Starter()
+  else
+    call goda#start(a:Starter)
+  endif
+endfunction
+
+" Build the binary of PLUGIN (goda#register()'s "build"), as REASON says:
+" a failure is that of its start.
+function! s:auto_build(plugin, build, reason) abort
+  echomsg 'goda: building the binary of "' . a:plugin . '" (' . a:reason . ')'
+  call a:build.build()
 endfunction
 
 " ---------------------------------------------------------------------------
@@ -344,6 +373,15 @@ function! goda#register(plugin, starter, opts = {}) abort
     throw 'goda: goda#register(): the options are a Dictionary'
   endif
   let s:starters[a:plugin] = a:starter
+  " How to build its binary, when it is not there or of another version.
+  if has_key(a:opts, 'build')
+    if type(a:opts.build) != v:t_func || type(get(a:opts, 'bin', 0)) != v:t_string
+      throw 'goda: goda#register(): "build" is a Funcref, with "bin" the binary it builds'
+    endif
+    let s:builds[a:plugin] = #{build: a:opts.build, bin: fnamemodify(expand(a:opts.bin), ':p')}
+  elseif has_key(s:builds, a:plugin)
+    call remove(s:builds, a:plugin)
+  endif
   " The version of the Vim script of the plugin (sdk.ScriptVersioner): a
   " binary of another is refused by goda#start().
   if has_key(a:opts, 'version')
@@ -424,6 +462,7 @@ function! goda#start(bin) abort
   let theirs = type(hello) == v:t_dict ? get(hello, 'protocol', 0) : 0
   if theirs != s:protocol
     call s:kill(inst)
+    let s:mismatched = bin
     throw 'goda: ' . bin . ' speaks protocol ' . theirs . ', this goda.vim expects ' . s:protocol
           \ . '; ' . s:rebuild(keys(s:starting), s:module) . ', or update the goda.vim plugin'
   endif
@@ -437,6 +476,7 @@ function! goda#start(bin) abort
     if !empty(want) && got != want.version
       call s:kill(inst)
       let s:failed[bin] = inst
+      let s:mismatched = bin
       throw s:version_error(bin, name, got, want)
     endif
   endfor
