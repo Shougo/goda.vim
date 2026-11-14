@@ -378,7 +378,7 @@ function! goda#register(plugin, starter, opts = {}) abort
     if type(a:opts.build) != v:t_func || type(get(a:opts, 'bin', 0)) != v:t_string
       throw 'goda: goda#register(): "build" is a Funcref, with "bin" the binary it builds'
     endif
-    let s:builds[a:plugin] = #{build: a:opts.build, bin: fnamemodify(expand(a:opts.bin), ':p')}
+    let s:builds[a:plugin] = #{build: a:opts.build, bin: fnamemodify(expand(a:opts.bin, 1), ':p')}
   elseif has_key(s:builds, a:plugin)
     call remove(s:builds, a:plugin)
   endif
@@ -400,7 +400,8 @@ endfunction
 " cannot be started, speaks another protocol version (update and rebuild it), or contains
 " a plugin whose name another running binary already serves.
 function! goda#start(bin) abort
-  let bin = fnamemodify(expand(a:bin), ':p')
+  " (expand() without 'wildignore': '*.exe' in it on Windows made it "".)
+  let bin = fnamemodify(expand(a:bin, 1), ':p')
   if !executable(bin)
     throw 'goda: not executable: ' . bin
   endif

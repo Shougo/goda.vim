@@ -196,6 +196,8 @@ function! s:build_copy(from = $GODA_BIN) abort
   call setfperm(s:auto_bin . '.new', 'rwxr-xr-x')
   call rename(s:auto_bin . '.new', s:auto_bin)
 endfunction
+" (Whatever 'wildignore' has: "*.exe" of Windows matched the binary.)
+set wildignore=*
 call goda#register('test', s:auto_bin, #{version: 3, build: function('s:build_copy'), bin: s:auto_bin})
 call s:rec('auto_build_none', {-> goda#request('test', 'echo', 'built')})
 call s:add("auto_build_none_builds\t" . s:builds)
@@ -223,6 +225,7 @@ call goda#register('test', s:no_bin, #{version: 3, build: function('s:build_copy
 call s:rec('auto_build_off', {-> goda#request('test', 'echo', 'x')})
 call s:add("auto_build_off_builds\t" . s:builds)
 unlet g:goda#auto_build
+set wildignore&
 call s:rec('auto_build_opts', {-> goda#register('test', $GODA_BIN, #{build: 1})})
 call goda#stop()
 
