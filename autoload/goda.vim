@@ -668,6 +668,7 @@ function! goda#build(opts) abort
   catch
     throw label . ': ' . v:exception
   endtry
+  call s:remove_aside(bin)
   let tmp = bin . '.new' . (has('win32') ? '.exe' : '')
   " Without the workspace, not of a go.work of the user either.
   let [out, failed] = s:go(dir, 'build -o ' . shellescape(tmp) . ' .', work ==# '' ? 'off' : work)
@@ -680,10 +681,44 @@ function! goda#build(opts) abort
   if fnamemodify(get(goda#plugins(), name, ''), ':p') ==# fnamemodify(bin, ':p')
     call goda#stop(name)
   endif
-  if rename(tmp, bin) != 0
+  if rename(tmp, bin) != 0 && !s:replace_aside(tmp, bin)
+    call delete(tmp)
     throw label . ': cannot replace ' . bin
   endif
   echomsg label . ': built ' . bin
+endfunction
+
+" On MS-Windows a binary that runs (in another Vim, or one still exiting)
+" can be neither removed nor replaced, but it can be renamed: BIN is moved
+" aside ({bin}.old{n}), and TMP takes its place. The binaries moved aside
+" are removed by a later build, once they no longer run.
+function! s:replace_aside(tmp, bin) abort
+  call s:remove_aside(a:bin)
+  let n = 1
+  while getftype(a:bin . '.old' . n) !=# ''
+    let n += 1
+  endwhile
+  let old = a:bin . '.old' . n
+  if rename(a:bin, old) != 0
+    return 0
+  endif
+  if rename(a:tmp, a:bin) != 0
+    call rename(old, a:bin)
+    return 0
+  endif
+  return 1
+endfunction
+
+" Remove the binaries moved aside from BIN: those that still run stay.
+function! s:remove_aside(bin) abort
+  let dir = fnamemodify(a:bin, ':h')
+  if !isdirectory(dir)
+    return
+  endif
+  let pattern = '^\V' . escape(fnamemodify(a:bin, ':t'), '\') . '.old\d\+\$'
+  for f in readdir(dir, {n -> n =~? pattern})
+    call delete(dir . '/' . f)
+  endfor
 endfunction
 
 " Run go ARGS in DIR, with $GOWORK set to GOWORK (unless it is v:null):

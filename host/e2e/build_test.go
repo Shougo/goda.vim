@@ -48,8 +48,12 @@ func TestBuild(t *testing.T) {
 				// The configuration requires a version of example.com/godalib
 				// that cannot be downloaded (GOPROXY=off).
 				"cfg/go.mod": "module example.com/cfg\n\ngo 1.21\n\nrequire example.com/godalib v1.0.0 // a comment\n",
-				"cfg/main.go": "package main\n\nimport (\n\t\"fmt\"\n\n\t\"example.com/godalib\"\n)\n\n" +
-					"func main() { fmt.Println(godalib.Where) }\n",
+				// With an argument, it runs a while: a binary that runs
+				// (in another Vim, say) when it is built again.
+				"cfg/main.go": "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"time\"\n\n" +
+					"\t\"example.com/godalib\"\n)\n\n" +
+					"func main() {\n\tif len(os.Args) > 1 {\n\t\ttime.Sleep(time.Minute)\n\t}\n" +
+					"\tfmt.Println(godalib.Where)\n}\n",
 				"lib/go.mod": "module example.com/godalib\n\ngo 1.22.1\n",
 				"lib/lib.go": "package godalib\n\nconst Where = \"workspace\"\n",
 				// Another directory of the same module: the first one is used.
@@ -90,6 +94,9 @@ func TestBuild(t *testing.T) {
 				"go_version":       "['go 1.22.1']",
 				"uses":             "2",
 				"other_used":       "0",
+				"running":          "workspace",
+				"running_tmp":      "0",
+				"aside_removed":    "[]",
 			}
 			for k, v := range want {
 				if got[k] != v {

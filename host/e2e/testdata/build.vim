@@ -50,5 +50,41 @@ call s:put('go_version', filter(copy(s:work), 'v:val =~# "^go "'))
 call s:put('uses', len(filter(copy(s:work), 'v:val =~# "^\t"')))
 call s:put('other_used', len(filter(copy(s:work), 'v:val =~# "other"')))
 
+" A binary that runs (not stopped by goda#build()): it is replaced all the
+" same (on MS-Windows, it is moved aside), and what was moved aside is
+" removed by the next build, once it no longer runs.
+if has('nvim')
+  let s:job = jobstart([s:bin, 'wait'])
+else
+  let s:job = job_start([s:bin, 'wait'])
+endif
+sleep 500m
+try
+  call goda#build(s:opts)
+  call s:put('running', trim(system(shellescape(s:bin))))
+catch
+  call s:put('running', v:exception)
+endtry
+call s:put('running_tmp', getftype(s:bin . '.new' . (has('win32') ? '.exe' : '')) !=# '')
+if has('nvim')
+  call jobstop(s:job)
+  call jobwait([s:job], 5000)
+else
+  call job_stop(s:job, 'kill')
+  for s:i in range(500)
+    if job_status(s:job) !=# 'run'
+      break
+    endif
+    sleep 10m
+  endfor
+endif
+sleep 500m
+try
+  call goda#build(s:opts)
+catch
+  call s:put('rebuilt', v:exception)
+endtry
+call s:put('aside_removed', readdir($GODA_BUILD_DIR . '/bin', {n -> n =~# '\.old'}))
+
 call writefile(s:out, $GODA_OUT)
 qall!

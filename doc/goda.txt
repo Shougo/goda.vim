@@ -203,6 +203,9 @@ goda#build({opts})
 		when it is {bin} (the next request starts it again, once
 		|goda#register()| said how).  When the build fails, it
 		throws, and the old binary keeps running.
+		On MS-Windows, a binary that still runs (in another Vim, say)
+		cannot be replaced: it is renamed to "{bin}.old{n}", and
+		removed by a later build once it no longer runs.
 
 		With |g:goda#workspace|, the modules of the plugins
 		installed that {dir} requires are used from their
