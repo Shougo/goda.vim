@@ -263,6 +263,23 @@ g:goda#workspace
 		its plugins (those you develop in a local directory too).
 		Only the modules the configuration requires are used.  Set
 		it to [] to build with the versions of go.mod.
+
+		The go.mod of the configuration is not updated: it is the
+		least versions, still used where the workspace is not.
+		Update it ("go get -u") for those:
+		- gopls, and go run in the configuration ("go build",
+		  "go vet"): the go.work is next to the binary, not in
+		  the configuration, so they use the versions of go.mod.
+		  An API only in the plugins installed is an error there,
+		  while |goda#build()| builds it.  (Or give gopls that
+		  go.work in $GOWORK.)
+		- The first build, before the plugins are installed: the
+		  workspace is still empty.
+		- A plugin the configuration does not require yet: only
+		  the modules it requires are used.  "go mod tidy" (run
+		  by |goda#build()|) requires its latest release; when
+		  what you import is not released yet, it fails: require
+		  the module by hand.
 		Default: []
 
 ==============================================================================
@@ -385,6 +402,7 @@ new Vim script can no longer work together.
 
 With |g:goda#workspace| (goda-pm.vim sets it), |goda#build()| builds with
 the plugins installed: after updating them, build again, without "go get".
+go.mod is still used elsewhere (gopls, say): see |g:goda#workspace|.
 
 ==============================================================================
 AI                                                                   *goda-ai*
