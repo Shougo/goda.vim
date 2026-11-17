@@ -664,7 +664,7 @@ function! goda#build(opts) abort
   let [tidy, tidy_failed] = s:go(dir, 'mod tidy', 'off')
 
   try
-    let work = s:write_go_work(dir, fnamemodify(bin, ':h') . '/go.work')
+    let [work, uses] = s:write_go_work(dir, fnamemodify(bin, ':h') . '/go.work')
   catch
     throw label . ': ' . v:exception
   endtry
@@ -676,6 +676,7 @@ function! goda#build(opts) abort
     call delete(tmp)
     throw label . ': go build failed:' . "\n" . out
           \ . (tidy_failed ? "\n" . 'go mod tidy failed too:' . "\n" . tidy : '')
+          \ . s:workspace_hint(out, uses)
   endif
 
   if fnamemodify(get(goda#plugins(), name, ''), ':p') ==# fnamemodify(bin, ':p')
@@ -798,7 +799,8 @@ function! s:go_older(a, b) abort
 endfunction
 
 " Write the go.work FILE of the module DIR and the modules of
-" g:goda#workspace it requires, and give its path: '' when it requires none.
+" g:goda#workspace it requires, and give its path ('' when it requires none)
+" and the modules used, [module, directory] each.
 function! s:write_go_work(dir, file) abort
   call delete(a:file)
   call delete(a:file . '.sum')
@@ -812,22 +814,22 @@ function! s:write_go_work(dir, file) abort
       continue
     endif
     let seen[module] = 1
-    call add(uses, module_dir)
+    call add(uses, [module, fnamemodify(module_dir, ':p')
+          \ ->substitute('[/\\]$', '', '')])
     if go ==# '' || s:go_older(go, module_go)
       let go = module_go
     endif
   endfor
   if empty(uses)
-    return ''
+    return ['', []]
   endif
   let lines = ['// Written by goda#build(): the plugins installed (g:goda#workspace).']
   if go !=# ''
     call add(lines, 'go ' . go)
   endif
   call add(lines, 'use (')
-  for d in uses
-    call add(lines, "\t" . json_encode(fnamemodify(d, ':p')
-          \ ->substitute('[/\\]$', '', '')->substitute('\\', '/', 'g')))
+  for use in uses
+    call add(lines, "\t" . json_encode(substitute(use[1], '\\', '/', 'g')))
   endfor
   call add(lines, ')')
   call writefile(lines, a:file)
@@ -839,7 +841,40 @@ function! s:write_go_work(dir, file) abort
   if failed
     throw 'go work use failed:' . "\n" . out
   endif
-  return a:file
+  return [a:file, uses]
+endfunction
+
+" The hint of a build with the modules USES of g:goda#workspace that failed
+" with OUT: they are not the versions of go.mod, and a plugin installed older
+" than the configuration is a usual cause ("go get" changes nothing).  A
+" package go found in none of them is said with its module.
+function! s:workspace_hint(out, uses) abort
+  if empty(a:uses)
+    return ''
+  endif
+  let missing = []
+  let start = 0
+  while 1
+    let [pkg, from, start] = matchstrpos(a:out,
+          \ 'no required module provides package \zs[^ ;]\+', start)
+    if from < 0
+      break
+    endif
+    call add(missing, pkg)
+  endwhile
+  let lines = ['', 'The modules of the plugins installed are used, '
+        \ . 'not the versions of go.mod (g:goda#workspace):']
+  for [module, dir] in a:uses
+    let line = "\t" . module . ': ' . dir
+    let pkgs = filter(copy(missing), {_, p -> p ==# module || stridx(p, module . '/') == 0})
+    if !empty(pkgs)
+      let line .= ' (without ' . join(pkgs, ', ') . ')'
+    endif
+    call add(lines, line)
+  endfor
+  call add(lines, 'A plugin installed older than the configuration is a usual cause: '
+        \ . 'update it, then build again ("go get" in the configuration changes nothing).')
+  return join(lines, "\n")
 endfunction
 
 " ---------------------------------------------------------------------------

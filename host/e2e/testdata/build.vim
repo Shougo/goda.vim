@@ -18,6 +18,8 @@ try
   call s:put('no_workspace', 'built')
 catch
   call s:put('no_workspace', v:exception =~# 'goda-cfg: go build failed' ? 'failed' : v:exception)
+  " Without the workspace, no hint about it.
+  call s:put('no_workspace_hint', v:exception =~# 'g:goda#workspace')
 endtry
 call s:put('no_workspace_bin', filereadable(s:bin))
 
@@ -49,6 +51,17 @@ let s:work = readfile($GODA_BUILD_DIR . '/bin/go.work')
 call s:put('go_version', filter(copy(s:work), 'v:val =~# "^go "'))
 call s:put('uses', len(filter(copy(s:work), 'v:val =~# "^\t"')))
 call s:put('other_used', len(filter(copy(s:work), 'v:val =~# "other"')))
+
+" A configuration that needs a package the plugin installed does not have:
+" the build failure says which module comes from where, and why.
+try
+  call goda#build(#{name: 'newer', dir: $GODA_BUILD_DIR . '/newer',
+        \ bin: $GODA_BUILD_DIR . '/bin/newer' . (has('win32') ? '.exe' : '')})
+  call s:put('older_plugin', 'built')
+catch
+  call s:put('older_plugin', matchstr(v:exception, '\n\t\zsexample\.com/godalib: [^\n]*'))
+  call s:put('older_hint', v:exception =~# 'update it, then build again')
+endtry
 
 " A binary that runs (not stopped by goda#build()): it is replaced all the
 " same (on MS-Windows, it is moved aside), and what was moved aside is

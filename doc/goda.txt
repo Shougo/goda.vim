@@ -211,7 +211,11 @@ goda#build({opts})
 		installed that {dir} requires are used from their
 		directories: a go.work next to {bin} says so.  The Go side
 		of a plugin is then that of its Vim script installed, without
-		"go get -u" in {dir}.
+		"go get -u" in {dir}.  When the build fails, the error says
+		which module comes from which directory, and the packages
+		they do not have ("no required module provides package"):
+		a plugin installed older than {dir} needs is updated, not
+		"go get" in {dir}.
 
 ==============================================================================
 VARIABLES                                                     *goda-variables*
