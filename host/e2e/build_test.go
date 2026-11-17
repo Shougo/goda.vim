@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -112,11 +113,21 @@ func TestBuild(t *testing.T) {
 				"go_version":        "['go 1.22.1']",
 				"uses":              "2",
 				"other_used":        "0",
-				"older_plugin":      "example.com/godalib: " + filepath.Join(dir, "lib") + " (without example.com/godalib/sub)",
+				"older_plugin":      "example.com/godalib: " + samePath(t, filepath.Join(dir, "lib")) + " (without example.com/godalib/sub)",
 				"older_hint":        "1",
 				"running":           "workspace",
 				"running_tmp":       "0",
 				"aside_removed":     "[]",
+			}
+			// The directory is as the editor says it: the long names (Vim) or
+			// the short ones (Neovim) on MS-Windows, with "\" only.
+			if m, rest, ok := strings.Cut(got["older_plugin"], ": "); ok {
+				if path, without, ok := strings.Cut(rest, " ("); ok {
+					if runtime.GOOS == "windows" && strings.Contains(path, "/") {
+						t.Errorf("older_plugin: %q mixes the separators", path)
+					}
+					got["older_plugin"] = m + ": " + samePath(t, path) + " (" + without
+				}
 			}
 			for k, v := range want {
 				if got[k] != v {
@@ -125,4 +136,16 @@ func TestBuild(t *testing.T) {
 			}
 		})
 	}
+}
+
+// samePath is PATH as the file system names it: the separators, the
+// symbolic links (/var is /private/var on macOS) and the short names of
+// MS-Windows resolved.
+func samePath(t *testing.T, path string) string {
+	t.Helper()
+	p, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return filepath.Clean(path)
+	}
+	return p
 }

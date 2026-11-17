@@ -814,8 +814,8 @@ function! s:write_go_work(dir, file) abort
       continue
     endif
     let seen[module] = 1
-    call add(uses, [module, fnamemodify(module_dir, ':p')
-          \ ->substitute('[/\\]$', '', '')])
+    call add(uses, [module, s:native_path(fnamemodify(module_dir, ':p')
+          \ ->substitute('[/\\]$', '', ''))])
     if go ==# '' || s:go_older(go, module_go)
       let go = module_go
     endif
@@ -842,6 +842,15 @@ function! s:write_go_work(dir, file) abort
     throw 'go work use failed:' . "\n" . out
   endif
   return [a:file, uses]
+endfunction
+
+" PATH with the separators of the system: "\" on MS-Windows (unless
+" 'shellslash'), which a path of g:goda#workspace may mix with "/".
+function! s:native_path(path) abort
+  if !has('win32')
+    return a:path
+  endif
+  return &shellslash ? tr(a:path, '\', '/') : tr(a:path, '/', '\')
 endfunction
 
 " The hint of a build with the modules USES of g:goda#workspace that failed
