@@ -34,6 +34,42 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+func TestInt(t *testing.T) {
+	for _, tc := range []struct {
+		v    any
+		want int
+		ok   bool
+	}{
+		{int64(42), 42, true},
+		{uint64(7), 7, true},
+		{float64(3.9), 3, true},
+		{-5, -5, true},
+		{int8(-1), -1, true},
+		{uint8(200), 200, true},
+		{json.Number("12"), 12, true},
+		{json.Number("2.5"), 2, true},
+		{json.Number("x"), 0, false},
+		{"12", 0, false},
+		{true, 0, false},
+		{nil, 0, false},
+	} {
+		if got, ok := Int(tc.v); got != tc.want || ok != tc.ok {
+			t.Errorf("Int(%#v) = %d, %v; want %d, %v", tc.v, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// What the hosts decode is a number for Int.
+func TestIntOfGeneric(t *testing.T) {
+	g, err := Generic(map[string]int{"n": 9})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, ok := Int(g.(map[string]any)["n"]); n != 9 || !ok {
+		t.Errorf("Int(Generic) = %d, %v", n, ok)
+	}
+}
+
 func TestGenericKeepsIntegers(t *testing.T) {
 	type T struct {
 		N int `json:"n"`

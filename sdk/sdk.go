@@ -174,6 +174,49 @@ func DecodeArgs(params []any, dsts ...any) error {
 	return nil
 }
 
+// Int returns the integer of a number from the editor, and whether v is a
+// number. The hosts give int64 (uint64 past it on Neovim) and float64 (a
+// Float, truncated); a Go integer and a json.Number (from Generic) are
+// numbers too. Anything else is (0, false): the caller picks its default.
+//
+//	lnum, _ := sdk.Int(v)
+func Int(v any) (int, bool) {
+	switch n := v.(type) {
+	case int64:
+		return int(n), true
+	case uint64:
+		return int(n), true
+	case float64:
+		return int(n), true
+	case int:
+		return n, true
+	case int32:
+		return int(n), true
+	case int16:
+		return int(n), true
+	case int8:
+		return int(n), true
+	case uint32:
+		return int(n), true
+	case uint16:
+		return int(n), true
+	case uint8:
+		return int(n), true
+	case uint:
+		return int(n), true
+	case float32:
+		return int(n), true
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return int(i), true
+		}
+		if f, err := n.Float64(); err == nil {
+			return int(f), true
+		}
+	}
+	return 0, false
+}
+
 // Optional marks a dst of DecodeArgs that may be missing (the last ones).
 func Optional(dst any) any { return optional{dst} }
 

@@ -313,6 +313,11 @@ one: an error says which one is missing or of another type, and the
 		return nil, err
 	}
 <
+`sdk.Int(v)` gives the integer of a number in such a value (int64, float64,
+or a json.Number from `sdk.Generic`) and whether it is one: >go
+
+	lnum, ok := sdk.Int(v)
+<
 
 `sdk.Host` is the editor: `Call(ctx, fn, args...)` calls a Vim function,
 `Notify(ctx, fn, args...)` calls one without waiting for it, `Eval` evaluates
