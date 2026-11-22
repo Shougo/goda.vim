@@ -318,6 +318,19 @@ or a json.Number from `sdk.Generic`) and whether it is one: >go
 
 	lnum, ok := sdk.Int(v)
 <
+Package `sdk/custom` merges the options of a plugin in the style of ddu.vim,
+ddt.vim and ddx.vim: those of the configuration (`PatchGlobal()`,
+`PatchLocal()`), of the plugin's #custom#patch_global() and patch_local(),
+and of the start, in that order (`Resolve()`).  goda-fi, goda-term and
+goda-hex use it: >go
+
+	c := custom.New[Options](custom.Params("uiParams"))
+	c.PatchGlobal(Options{UI: "shell"})
+	o, _, err := c.Resolve(user, request)
+<
+`custom.Params(names...)` merges those options param by param (as
+ddt.vim); `custom.Deep()` merges every map recursively, a nil value
+unset (as ddu.vim); `custom.Strict()` makes an unknown option an error.
 
 `sdk.Host` is the editor: `Call(ctx, fn, args...)` calls a Vim function,
 `Notify(ctx, fn, args...)` calls one without waiting for it, `Eval` evaluates
