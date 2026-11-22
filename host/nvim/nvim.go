@@ -7,9 +7,12 @@ package nvim
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log"
+	"math"
 	"os"
+	"unicode/utf8"
 
 	"github.com/Shougo/goda.vim/sdk"
 )
@@ -22,10 +25,7 @@ func (h *Host) Meta() sdk.Meta { return sdk.Meta{Host: sdk.HostNvim} }
 // Call converts args to generic values first, so that structs (which the
 // msgpack codec does not know) can be passed as they can on Vim.
 func (h *Host) Call(ctx context.Context, fn string, args ...any) (any, error) {
-	if args == nil {
-		args = []any{}
-	}
-	norm, err := sdk.Generic(args)
+	norm, err := normalize(args)
 	if err != nil {
 		return nil, err
 	}
@@ -38,10 +38,7 @@ func (h *Host) Call(ctx context.Context, fn string, args ...any) (any, error) {
 // through goda#_notify, as on Vim, so that an error is kept for goda#log()
 // the same way in both editors.
 func (h *Host) Notify(_ context.Context, fn string, args ...any) error {
-	if args == nil {
-		args = []any{}
-	}
-	norm, err := sdk.Generic(args)
+	norm, err := normalize(args)
 	if err != nil {
 		return err
 	}
@@ -77,4 +74,59 @@ func ServeIO(ctx context.Context, r io.Reader, w io.Writer, table map[string]sdk
 		})
 	}
 	return c.serve(ctx)
+}
+
+// normalize gives args as generic values for the msgpack codec. Generic
+// args are sent as they are: sdk.Generic would give the same values, and
+// its JSON round trip costs much for long lists (the items of a
+// completion). Others go through sdk.Generic.
+func normalize(args []any) (any, error) {
+	if args == nil {
+		return []any{}, nil
+	}
+	if generic(args) {
+		return args, nil
+	}
+	return sdk.Generic(args)
+}
+
+// generic reports whether v is made of values that sdk.Generic keeps as
+// they are on the wire. Not: a float (an integral one becomes an integer), a
+// string not in UTF-8 (JSON replaces the bytes), an integer past int64 (it
+// becomes a float), []byte (base64), a struct, and the typed slices and maps
+// but []string.
+func generic(v any) bool {
+	switch x := v.(type) {
+	case nil, bool, int, int8, int16, int32, int64, uint8, uint16, uint32,
+		json.Number:
+		return true
+	case uint:
+		return uint64(x) <= math.MaxInt64
+	case uint64:
+		return x <= math.MaxInt64
+	case string:
+		return utf8.ValidString(x)
+	case []string:
+		for _, e := range x {
+			if !utf8.ValidString(e) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		for _, e := range x {
+			if !generic(e) {
+				return false
+			}
+		}
+		return true
+	case map[string]any:
+		for k, e := range x {
+			if !utf8.ValidString(k) || !generic(e) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
