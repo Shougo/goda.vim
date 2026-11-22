@@ -189,7 +189,8 @@ goda#log([{plugin}])
                                                                 *goda#build()*
 goda#build({opts})
 		Build the configuration module of a plugin into its binary,
-		as the build() of a plugin does (|goda_cmp#build()|): >
+		as the build() of a plugin does (|goda_cmp#build()|;
+		|goda#configured#new()| calls it so): >
 		call goda#build(#{name: 'fi', dir: s:config_dir(),
 		      \ bin: s:default_bin()})
 		call goda#register('fi', function('s:start'), s:version)
@@ -216,6 +217,52 @@ goda#build({opts})
 		they do not have ("no required module provides package"):
 		a plugin installed older than {dir} needs is updated, not
 		"go get" in {dir}.
+
+                                                      *goda#configured#new()*
+goda#configured#new({name} [, {opts}])
+		The setup of a plugin whose binary is built from the
+		configuration of the user (a Go module), as goda-cmp.vim,
+		goda-fi.vim and the others: where the configuration and the
+		binary are, how to build the binary, and how to start it.
+		For the plugin "foo" (its autoload script goda_foo.vim):
+		g:goda_foo#config_dir	The configuration.  Default:
+					"goda-foo" in stdpath('config') of
+					Neovim, ~/.vim of Vim.
+		g:goda_foo#binary	A binary that the user builds.
+					Default: goda-foo in the directory
+					"goda-foo" of the cache (stdpath('cache')
+					of Neovim; $XDG_CACHE_HOME/vim,
+					$LOCALAPPDATA/vim or ~/.cache/vim of
+					Vim), built by goda.vim when there is
+					none or it is of another version.
+		goda_foo#build()	The build of the plugin: the errors say
+					to call it.
+		{opts} keys:
+		version, module	Those of |goda#register()|.
+		status		Whether the binary is asked "status" as it
+				starts: a binary built from an invalid
+				configuration says why there, and it is
+				stopped.  Default: |v:true|.
+		The result has:
+		config_dir()	The configuration.
+		binary()	The binary, a full path.
+		build()		|goda#build()| of the configuration into the
+				binary.
+		register([{starter}])
+				|goda#register()| of the plugin: with "build"
+				and "bin" but for the binary of the user, and
+				with start() as {starter} by default.
+		start()		Start the binary: it must contain the plugin,
+				and its "status" (if asked) must be "".
+		A plugin calls it at the top of its autoload script: >
+		let s:goda = goda#configured#new('foo',
+		      \ #{version: 1, module: 'github.com/you/goda-foo.vim'})
+		function! goda_foo#build() abort
+		  call s:goda.build()
+		  call s:goda.register()
+		endfunction
+		call s:goda.register()
+<
 
 ==============================================================================
 VARIABLES                                                     *goda-variables*

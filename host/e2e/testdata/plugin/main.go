@@ -52,6 +52,11 @@ func (testPlugin) Close(context.Context) error {
 func (testPlugin) Handlers() map[string]sdk.Handler {
 	return map[string]sdk.Handler{
 		"echo": func(_ context.Context, _ sdk.Host, p []any) (any, error) { return p, nil },
+		// status, as that of the plugins of goda#configured#new(): what is
+		// wrong with the configuration ($GODA_TEST_STATUS).
+		"status": func(context.Context, sdk.Host, []any) (any, error) {
+			return os.Getenv("GODA_TEST_STATUS"), nil
+		},
 
 		// record(n), as notifications: the first ones take longer, and
 		// they must still be handled in order.

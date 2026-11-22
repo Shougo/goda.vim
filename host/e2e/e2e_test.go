@@ -194,6 +194,16 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		"auto_build_version_builds":  "3",
 		"auto_build_off_builds":      "3",
 		"version_same":               `["v3"]`,
+		// goda#configured#new()
+		"configured_config_dir":     "1",
+		"configured_binary":         "1",
+		"configured_config_dir_var": "1",
+		"configured_binary_var":     "1",
+		"configured_start":          `["x"]`,
+		"configured_status_running": "0",
+		"configured_no_status":      `["y"]`,
+		"configured_other_running":  "0",
+		"configured_starter":        `["z"]`,
 	}
 	for name, w := range want {
 		if res[name] != w {
@@ -286,6 +296,12 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		"version_workspace": `was built for an older plugin "test" (version 3) than its Vim script (version 4): build the binary again (call goda_test#build())`,
 		"version_newer":     `was built for a newer plugin "test" (version 3) than its Vim script (version 2): update the plugin, or build the binary again`,
 		"version_none":      `was built for an older plugin "other" than its Vim script (version 1)`,
+		// goda#configured#new()
+		"configured_build":   `goda-test: no config directory: `,
+		"configured_status":  `goda-test: fix the configuration in `,
+		"configured_other":   `does not contain the "test" plugin`,
+		"configured_missing": `does not exist yet; build it with: call goda_test#build()`,
+		"configured_opts":    "the options are a Dictionary",
 	} {
 		if v := res[name]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, want) {
 			t.Errorf("%s = %q, want an exception mentioning %q", name, v, want)

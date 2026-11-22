@@ -229,4 +229,52 @@ set wildignore&
 call s:rec('auto_build_opts', {-> goda#register('test', $GODA_BIN, #{build: 1})})
 call goda#stop()
 
+" goda#configured#new(): the plugin "test" set up as the plugins built from
+" a configuration are.
+let s:cfg = goda#configured#new('test', #{version: 3, module: 'example.com/test'})
+call s:add("configured_config_dir\t" . (s:cfg.config_dir() =~# '[/\\]goda-test$'))
+call s:add("configured_binary\t" . (s:cfg.binary() =~# '[/\\]goda-test[/\\]goda-test\%(\.exe\)\=$'))
+let g:goda_test#config_dir = tempname()
+call s:add("configured_config_dir_var\t" . (s:cfg.config_dir() ==# g:goda_test#config_dir))
+" No binary: built, from a configuration that is not there.
+call s:cfg.register()
+call s:rec('configured_build', {-> goda#request('test', 'echo', 'x')})
+" The binary of the user.
+let g:goda_test#binary = $GODA_BIN
+call s:add("configured_binary_var\t" . (s:cfg.binary() ==# fnamemodify($GODA_BIN, ':p')))
+call s:cfg.register()
+call s:rec('configured_start', {-> goda#request('test', 'echo', 'x')})
+call goda#stop()
+sleep 100m
+" A configuration the binary says is invalid: it is stopped.
+let $GODA_TEST_STATUS = 'bad config'
+call s:cfg.register()
+call s:rec('configured_status', {-> goda#request('test', 'echo', 'x')})
+call s:add("configured_status_running\t" . goda#is_running('test'))
+" Not asked.
+let s:cfg_nostatus = goda#configured#new('test', #{status: v:false})
+call s:cfg_nostatus.register()
+call s:rec('configured_no_status', {-> goda#request('test', 'echo', 'y')})
+call goda#stop()
+sleep 100m
+unlet $GODA_TEST_STATUS
+" A binary of another plugin: it is not left running. (Without the version
+" of "other" registered above.)
+call goda#register('other', $GODA_BIN2)
+let g:goda_test#binary = $GODA_BIN2
+call s:cfg.register()
+call s:rec('configured_other', {-> goda#request('test', 'echo', 'x')})
+call s:add("configured_other_running\t" . goda#is_running('other'))
+" A binary that is not there.
+let g:goda_test#binary = tempname()
+call s:cfg.register()
+call s:rec('configured_missing', {-> goda#request('test', 'echo', 'x')})
+" Another starter.
+let g:goda_test#binary = $GODA_BIN
+call s:cfg.register({-> goda#start($GODA_BIN)})
+call s:rec('configured_starter', {-> goda#request('test', 'echo', 'z')})
+call goda#stop()
+call s:rec('configured_opts', {-> goda#configured#new('test', 1)})
+unlet g:goda_test#binary g:goda_test#config_dir
+
 qa!
