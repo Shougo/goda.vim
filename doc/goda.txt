@@ -243,6 +243,17 @@ goda#configured#new({name} [, {opts}])
 				starts: a binary built from an invalid
 				configuration says why there, and it is
 				stopped.  Default: |v:true|.
+		dir		The module built when g:goda_foo#config_dir
+				is not set, instead of "goda-foo" in the
+				configuration of the editor.  A plugin that
+				has no configuration of the user gives its
+				own directory: its binary is built from the
+				plugin as it is installed (and the user can
+				still build a copy of their own, with
+				g:goda_foo#config_dir): >
+			let s:goda = goda#configured#new('foo', #{version: 1,
+			      \ dir: expand('<sfile>:p:h:h'), status: v:false})
+<
 		The result has:
 		config_dir()	The configuration.
 		binary()	The binary, a full path.

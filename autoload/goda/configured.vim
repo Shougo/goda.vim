@@ -15,8 +15,11 @@
 "                          errors say to call it)
 
 " A plugin set up by NAME; OPTS are "version" and "module" (those of
-" goda#register()), and "status": whether the binary is asked "status" as
-" it starts (v:true by default). The plugin has:
+" goda#register()), "status": whether the binary is asked "status" as it
+" starts (v:true by default), and "dir": the module built when
+" g:goda_foo#config_dir is not set, instead of {config}/goda-foo (a plugin
+" with no configuration of the user builds its own directory). The plugin
+" has:
 "
 "   config_dir()      the directory of the configuration
 "   binary()          the binary
@@ -35,9 +38,13 @@ function! goda#configured#new(name, opts = {}) abort
   if type(a:opts) != v:t_dict
     throw 'goda: goda#configured#new(): the options are a Dictionary'
   endif
+  if has_key(a:opts, 'dir') && (type(a:opts.dir) != v:t_string || a:opts.dir ==# '')
+    throw 'goda: goda#configured#new(): "dir" is a directory'
+  endif
   let p = #{name: a:name,
         \ _version: filter(copy(a:opts), {k, v -> k ==# 'version' || k ==# 'module'}),
-        \ _status: get(a:opts, 'status', v:true)}
+        \ _status: get(a:opts, 'status', v:true),
+        \ _dir: get(a:opts, 'dir', '')}
   " (Partials of the plugin, not dict functions: goda#register() calls
   " "build" from a Dictionary of its own.)
   for method in ['config_dir', 'binary', 'build', 'register', 'start']
@@ -58,6 +65,9 @@ function! s:config_dir(p) abort
   let var = s:var(a:p, 'config_dir')
   if has_key(g:, var)
     return expand(g:[var], 1)
+  endif
+  if a:p._dir !=# ''
+    return a:p._dir
   endif
   return (has('nvim') ? stdpath('config') : expand('~/.vim', 1)) . '/' . s:label(a:p)
 endfunction
