@@ -51,6 +51,8 @@ call s:rec('plugins', {-> sort(keys(goda#plugins()))})
 call s:rec('reserved', {-> goda#request('goda', 'plugins')})
 call s:rec('other_ping', {-> goda#request('other', 'ping')})
 call s:rec('echo', {-> goda#request('test', 'echo', 1, 2.5, 'x', [v:true, v:null], {'k': ['日本語']})})
+" Whole floats stay Floats (Vim reads the JSON "1" as a Number).
+call s:rec('echo_whole_float', {-> string(goda#request('test', 'echo', 1.0, [-3.0], {'f': 0.0}))})
 call s:rec('meta', {-> goda#request('test', 'meta')})
 
 " The plugin calls back into this Vim while Vim waits for the answer.

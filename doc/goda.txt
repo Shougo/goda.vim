@@ -361,6 +361,10 @@ Parameters and results are generic values: nil, bool, int64, float64, string,
 into a struct, `sdk.Generic` converts a struct into a result.  A value the
 destination holds as it is (a map[string]any into a map[string]any, anything
 into an any) is not copied, so its integers stay int64.
+A float64 of a result reaches both editors as a |Float|, 1.0 too.  In a
+struct (through `sdk.Generic`) it goes through JSON, which writes 1.0 as 1:
+it reaches the editor as a |Number|.  Return a float64 in a generic value to
+keep it a Float.
 `sdk.DecodeArgs(params, &a, &b, sdk.Optional(&c))` copies the params one by
 one: an error says which one is missing or of another type, and the
 `sdk.Optional` ones at the end may be missing (they keep their value). >go

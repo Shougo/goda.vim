@@ -217,7 +217,7 @@ func (c *conn) run(ctx context.Context, raw json.RawMessage) (res any, err error
 }
 
 func (c *conn) send(v any) error {
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(floats(v))
 	if err != nil {
 		return err
 	}

@@ -169,6 +169,7 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		"other_running":         "0",
 		"test_after_other_stop": `["alive"]`,
 		"echo":                  `[1,2.5,"x",[true,null],{"k":["日本語"]}]`,
+		"echo_whole_float":      `"[1.0, [-3.0], {'f': 0.0}]"`,
 		"meta":                  `"` + ed.name + `"`,
 		// Still usable after a request timed out (Vim) or took long (Neovim),
 		// after a notification, and after the late answer arrived.
