@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -143,5 +144,22 @@ func TestEncodeJSONNumber(t *testing.T) {
 	}
 	if _, err := Encode(json.Number("not a number")); err == nil {
 		t.Fatal("a malformed json.Number must be rejected")
+	}
+}
+
+// A header alone does not allocate the length it claims: the data of a long
+// value is read as it comes.
+func TestDecodeLongHeaderAllocatesLittle(t *testing.T) {
+	in := []byte{0xdb, 0x0f, 0xff, 0xff, 0xff} // str 32 of 268435455 bytes, no data
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	_, err := NewDecoder(bytes.NewReader(in)).Decode()
+	runtime.ReadMemStats(&after)
+	if err != io.ErrUnexpectedEOF {
+		t.Errorf("err %v, want %v", err, io.ErrUnexpectedEOF)
+	}
+	if n := after.TotalAlloc - before.TotalAlloc; n > 1<<20 {
+		t.Errorf("allocated %d bytes for a header of %d", n, len(in))
 	}
 }

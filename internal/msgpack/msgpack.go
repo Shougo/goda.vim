@@ -10,6 +10,7 @@ package msgpack
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -21,6 +22,9 @@ import (
 const (
 	maxLen   = 1 << 28 // refuse absurd lengths from a misbehaving peer
 	maxDepth = 512
+
+	// readChunk is the most allocated for a value before its data comes.
+	readChunk = 64 << 10
 )
 
 // Ext is a MessagePack extension value (Neovim uses these for Buffer, Window
@@ -314,11 +318,24 @@ func (d *Decoder) readN(n int) ([]byte, error) {
 	if n < 0 || n > maxLen {
 		return nil, fmt.Errorf("msgpack: length %d exceeds limit", n)
 	}
-	buf := make([]byte, n)
-	if _, err := io.ReadFull(d.r, buf); err != nil {
+	if n <= readChunk {
+		buf := make([]byte, n)
+		if _, err := io.ReadFull(d.r, buf); err != nil {
+			return nil, err
+		}
+		return buf, nil
+	}
+	// A long one grows as the data comes: a header alone (5 bytes) must not
+	// allocate maxLen.
+	var buf bytes.Buffer
+	buf.Grow(readChunk)
+	if m, err := io.CopyN(&buf, d.r, int64(n)); err != nil {
+		if err == io.EOF && m > 0 {
+			err = io.ErrUnexpectedEOF
+		}
 		return nil, err
 	}
-	return buf, nil
+	return buf.Bytes(), nil
 }
 
 func (d *Decoder) uintN(size int) (uint64, error) {
