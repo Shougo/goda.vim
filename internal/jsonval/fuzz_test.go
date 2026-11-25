@@ -23,12 +23,6 @@ func FuzzDecode(f *testing.F) {
 		if err != nil {
 			return
 		}
-		if hasInf(v) {
-			// Decode turns a number out of the range of float64 ("1e700")
-			// into ±Inf, which JSON cannot carry back.  The editors do not
-			// send one (Vim writes inf as "Infinity", which Decode rejects).
-			return
-		}
 		e, err := json.Marshal(v)
 		if err != nil {
 			t.Fatalf("json.Marshal(%#v) of %q: %v", v, b, err)
@@ -84,24 +78,4 @@ func number(v any) float64 {
 		return x
 	}
 	return math.NaN()
-}
-
-func hasInf(v any) bool {
-	switch x := v.(type) {
-	case float64:
-		return math.IsInf(x, 0)
-	case []any:
-		for _, e := range x {
-			if hasInf(e) {
-				return true
-			}
-		}
-	case map[string]any:
-		for _, e := range x {
-			if hasInf(e) {
-				return true
-			}
-		}
-	}
-	return false
 }

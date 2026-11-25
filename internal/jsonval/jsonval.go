@@ -7,9 +7,12 @@ package jsonval
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 )
 
 // Decode parses one JSON value. Integers become int64, other numbers float64.
+// A number out of the range of float64 ("1e700") is an error, as for
+// json.Unmarshal: it would be ±Inf, which JSON cannot carry back.
 func Decode(raw []byte) (any, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
@@ -17,28 +20,39 @@ func Decode(raw []byte) (any, error) {
 	if err := dec.Decode(&v); err != nil {
 		return nil, err
 	}
-	return normalize(v), nil
+	return normalize(v)
 }
 
-func normalize(v any) any {
+func normalize(v any) (any, error) {
 	switch x := v.(type) {
 	case json.Number:
 		if i, err := x.Int64(); err == nil {
-			return i
+			return i, nil
 		}
-		f, _ := x.Float64()
-		return f
+		f, err := x.Float64()
+		if err != nil {
+			return nil, fmt.Errorf("jsonval: number %s out of range", x)
+		}
+		return f, nil
 	case []any:
 		for i := range x {
-			x[i] = normalize(x[i])
+			e, err := normalize(x[i])
+			if err != nil {
+				return nil, err
+			}
+			x[i] = e
 		}
-		return x
+		return x, nil
 	case map[string]any:
 		for k := range x {
-			x[k] = normalize(x[k])
+			e, err := normalize(x[k])
+			if err != nil {
+				return nil, err
+			}
+			x[k] = e
 		}
-		return x
+		return x, nil
 	default:
-		return v
+		return v, nil
 	}
 }

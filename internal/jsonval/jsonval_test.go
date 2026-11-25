@@ -23,3 +23,14 @@ func TestDecodeRejectsGarbage(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeRejectsOutOfRange(t *testing.T) {
+	for _, s := range []string{`1e700`, `-1e700`, `[1, 1e700]`, `{"a": {"b": -1e700}}`} {
+		if v, err := Decode([]byte(s)); err == nil {
+			t.Errorf("Decode(%s) = %#v, want an error", s, v)
+		}
+	}
+	if v, err := Decode([]byte(`1e308`)); err != nil || v != 1e308 {
+		t.Errorf("Decode(1e308) = %#v, %v", v, err)
+	}
+}
