@@ -276,7 +276,7 @@ func run(t *testing.T, ed editor, root, script string, f fixtures) {
 		"reserved":         "reserved",
 		"conflict":         "already served",
 		"old_protocol":     "protocol 99",
-		"other_after_stop": "unknown plugin",
+		"other_after_stop": "goda#register() starts it",
 	} {
 		if v := res[name]; !strings.HasPrefix(v, "EXC ") || !strings.Contains(v, want) {
 			t.Errorf("%s = %q, want an exception mentioning %q", name, v, want)

@@ -10,6 +10,7 @@ Functions		|goda-functions|
 Variables		|goda-variables|
 Writing a plugin	|goda-plugin|
 Versions		|goda-versions|
+Compatibility		|goda-compatibility|
 AI			|goda-ai|
 FAQ			|goda-faq|
 
@@ -487,6 +488,28 @@ new Vim script can no longer work together.
 With |g:goda#workspace| (goda-pm.vim sets it), |goda#build()| builds with
 the plugins installed: after updating them, build again, without "go get".
 go.mod is still used elsewhere (gopls, say): see |g:goda#workspace|.
+
+==============================================================================
+COMPATIBILITY                                             *goda-compatibility*
+
+The API of goda.vim is what plugins are written against:
+- The Go packages `sdk`, `sdk/custom`, `sdk/vimscript`, and `host.Main` with
+  what it takes.
+- The functions and variables in |goda-functions| and |goda-variables|.
+
+A new function, field or option is added in a minor version.  A change that
+breaks a plugin written against the API (a name removed or renamed, a
+signature or a meaning changed) is made only in a minor version too, before
+1.0.0, and is said in its release; a patch version never makes one.  After
+1.0.0, it waits for 2.0.0.
+
+Not part of it:
+- Package `internal/` and the transports `host/vim`, `host/nvim`,
+  `host/jsonl`.
+- The functions whose names start with "goda#_".
+- The protocol between the Vim script and a binary: its version says when
+  it changes (|goda-versions|).
+- The text of the messages and of |goda#log()|.
 
 ==============================================================================
 AI                                                                   *goda-ai*

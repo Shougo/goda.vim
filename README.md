@@ -12,7 +12,8 @@ editor. Plugins built on it, such as [goda-cmp.vim](https://github.com/Shougo/go
 define their own extension kinds (sources, filters, UIs) as plain Go packages
 that are linked into the binary at build time.
 
-> Status: early. The API may still change; see [Status](#status).
+> Before 1.0.0, a change that breaks plugins is made only in a minor version
+> and said in its release; see `:help goda-compatibility`.
 
 ## Naming
 
@@ -181,9 +182,9 @@ this project are not built on the assumption that AI exists.
 
 ## Status
 
-Checked: `go vet`, `go test` (and `-race`), both transports and the Vim
-script against Vim 9.1 and Neovim 0.12 on Linux, several binaries at once,
-the handshake. Not checked by the automated tests: Windows, macOS.
+Checked: `go vet`, `go test` (and `-race` on Linux), both transports and
+the Vim script against Vim and Neovim on Linux, macOS and MS-Windows, several
+binaries at once, the handshake.
 
 ## License
 

@@ -290,7 +290,8 @@ function! s:route(plugin) abort
     let inst = get(s:routes, a:plugin, v:null)
   endif
   if inst is v:null
-    throw 'goda: unknown plugin "' . a:plugin . '" (is its binary started? see goda#plugins())'
+    throw 'goda: unknown plugin "' . a:plugin . '" (is its binary started? see'
+          \ . ' goda#plugins(); goda#register() starts it on a request)'
   endif
   if !s:alive(inst)
     throw 'goda: ' . inst.bin . ' (plugin "' . a:plugin . '") is not running; see goda#log("' . a:plugin . '")'
