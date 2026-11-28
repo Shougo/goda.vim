@@ -32,7 +32,7 @@ jobs:
           version: stable
       # After the editors: installing them may put a directory with the
       # runner's own, older Go first in PATH.
-      - uses: actions/setup-go@v7.0.0
+      - uses: actions/setup-go@v7.1.0
         with:
           go-version: ${{ matrix.go }}
           cache: false  # no dependencies, no go.sum
@@ -71,7 +71,7 @@ jobs:
         with:
           neovim: true
           version: stable
-      - uses: actions/setup-go@v7.0.0
+      - uses: actions/setup-go@v7.1.0
         with:
           go-version: stable
           cache: false  # no dependencies, no go.sum
