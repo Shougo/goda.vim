@@ -1,6 +1,7 @@
 package custom_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -115,5 +116,44 @@ func TestDecodeParams(t *testing.T) {
 	}
 	if _, err := custom.DecodeParams(custom.Map{"a": "x"}, p{}); err == nil {
 		t.Error("a bad param is accepted")
+	}
+}
+
+// The numbers of ToMap are json.Number: a float64 would reach Vim as a
+// Float, and popup_create() and others refuse it for a Number.
+func TestToMapNumbers(t *testing.T) {
+	type inner struct {
+		N int `json:"n"`
+	}
+	type opts struct {
+		I     int     `json:"i"`
+		F     float64 `json:"f"`
+		Inner inner   `json:"inner"`
+		List  []int   `json:"list"`
+	}
+	m, err := custom.ToMap(opts{I: 20, F: 0.5, Inner: inner{N: 3}, List: []int{1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := custom.Map{
+		"i":     json.Number("20"),
+		"f":     json.Number("0.5"),
+		"inner": map[string]any{"n": json.Number("3")},
+		"list":  []any{json.Number("1")},
+	}
+	if !reflect.DeepEqual(m, want) {
+		t.Errorf("ToMap = %#v, want %#v", m, want)
+	}
+	// And through the patches: what Resolve gives back to Vim.
+	p := custom.New[opts]()
+	if err := p.PatchGlobal(opts{I: 20}); err != nil {
+		t.Fatal(err)
+	}
+	o, pm, err := p.Resolve(custom.Map{"f": 0.5}, custom.Request{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.I != 20 || o.F != 0.5 || pm["i"] != json.Number("20") {
+		t.Errorf("Resolve = %+v, %#v", o, pm)
 	}
 }

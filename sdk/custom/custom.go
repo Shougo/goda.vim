@@ -229,6 +229,8 @@ func asMap(v any) Map {
 }
 
 // ToMap is the options o as a Map (by their json tags). A Map is itself.
+// Its numbers are json.Number, not float64: the whole ones reach Vim as
+// Numbers (a float64 reaches it as a Float), as the options of Vim do.
 func ToMap(o any) (Map, error) {
 	if m, ok := o.(Map); ok {
 		return m, nil
@@ -237,8 +239,10 @@ func ToMap(o any) (Map, error) {
 	if err != nil {
 		return nil, err
 	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
 	m := Map{}
-	return m, json.Unmarshal(b, &m)
+	return m, dec.Decode(&m)
 }
 
 // DecodeParams is defaults with params over it: the params of a UI, say, as
