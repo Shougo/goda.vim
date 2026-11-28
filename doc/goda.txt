@@ -231,13 +231,14 @@ goda#configured#new({name} [, {opts}])
 					Neovim, ~/.vim of Vim.
 		g:goda_foo#binary	A binary that the user builds.
 					Default: goda-foo in the directory
-					"goda-foo" of the cache (stdpath('cache')
-					of Neovim; $XDG_CACHE_HOME/vim,
+					"goda-foo" of the cache
+					(stdpath('cache') of Neovim;
+					$XDG_CACHE_HOME/vim,
 					$LOCALAPPDATA/vim or ~/.cache/vim of
 					Vim), built by goda.vim when there is
 					none or it is of another version.
-		goda_foo#build()	The build of the plugin: the errors say
-					to call it.
+		goda_foo#build()	The build of the plugin: the errors
+					say to call it.
 		{opts} keys:
 		version, module	Those of |goda#register()|.
 		status		Whether the binary is asked "status" as it
@@ -403,9 +404,15 @@ followed by a `Call` runs first.  Neovim runs a `Notify` once it is back to
 its loop, or before the next `Call`, `Eval` or `Cmd` of the plugin: not
 while it waits in |rpcrequest()|, where a request the function made (an
 autocommand of a window it opened, say) would come between the request
-waited for and its answer, which Neovim refuses.  `Notify` returns once the call is sent; an
-error of the function is not returned but kept for |goda#log()| (as lines
-starting with "[notify]").
+waited for and its answer, which Neovim refuses.  `Notify` returns once the
+call is sent; an error of the function is not returned but kept for
+|goda#log()| (as lines starting with "[notify]").
+
+So a function that a handler notifies may run before the |goda#request()|
+that started the handler returns: in Vim at once, in Neovim when the handler
+calls back into the editor after it (otherwise once Neovim is back to its
+loop).  Set up what such a function needs before calling |goda#request()|,
+not after it returns.
 
 `sdk.Host` does not get more methods: that would break every implementation
 outside goda.vim, such as the fakes in tests.  A capability added later is a
@@ -463,7 +470,7 @@ The functions of the script are named as those of its autoload path
 (myplugin#kind#file#*), and may call its script-local functions.  Where the
 scripts are is in |g:goda#vimscripts|.
 
-                                                            *goda-command-line*
+                                                           *goda-command-line*
 Vim starts a binary as `{bin} --transport=vim`, Neovim as
 `{bin} --transport=nvim` (`--transport=jsonl` is for running it by hand), and
 that is all the editor ever passes: no other options, arguments or
